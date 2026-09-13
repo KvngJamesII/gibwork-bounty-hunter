@@ -1,0 +1,45 @@
+{
+  "name": "@idledev/gibwork-bounty-hunter",
+  "version": "0.1.0",
+  "description": "Non-web Gibwork use case: CLI + MCP agent that discovers, ranks, and drafts coding bounty work via @gibwork/sdk",
+  "type": "module",
+  "bin": {
+    "gib-hunt": "./dist/cli/index.js",
+    "gibwork-bounty-hunter-mcp": "./dist/mcp/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "start": "node dist/cli/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "gibwork",
+    "solana",
+    "bounty",
+    "cli",
+    "mcp",
+    "agent"
+  ],
+  "author": "IdleDev <onlyidledev@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KvngJamesII/gibwork-bounty-hunter"
+  },
+  "dependencies": {
+    "@gibwork/sdk": "^0.2.0",
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "commander": "^14.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

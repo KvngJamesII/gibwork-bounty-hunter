@@ -1,0 +1,17 @@
+$ gib-hunt explore --limit 5
+- [1052f22d] Gibwork Developer Hackathon Bounty | $1000 | https://gib.work/bounty/1052f22d-3f87-4b1d-b0d7-71a60679e7fa
+- [cc14599e] Refer. Share. Win upto $300 USDC | $300 | https://gib.work/bounty/cc14599e-ed38-4bdc-b55a-09cd8f8c1010
+- [8d21b03d] Share How You Actually Use BASIS Pick ONE Theme | $220 | https://gib.work/bounty/8d21b03d-1649-479c-91c7-b73023af08b3
+- [a5ec2956] Share Your BASIS Week Pick ONE Theme | $150 | https://gib.work/bounty/a5ec2956-3f86-4a13-9fef-a3623c563a2e
+- [b3735fc5] Introduce Yourself to the Community | $130 | https://gib.work/bounty/b3735fc5-991c-45e6-aea0-8755314acb0c
+
+$ gib-hunt rank --top 3 --min-usd 20
+1. score=96.0 $1000 — Gibwork Developer Hackathon Bounty
+   https://gib.work/bounty/1052f22d-3f87-4b1d-b0d7-71a60679e7fa
+   reward~$1000 | skills:development,cli,mcp,sdk | dev-tag
+2. score=62.0 $220 — Share How You Actually Use BASIS Pick ONE Theme
+   https://gib.work/bounty/8d21b03d-1649-479c-91c7-b73023af08b3
+   reward~$220 | skills:rust | deadline:11.5d
+3. score=61.2 $150 — Share Your BASIS Week Pick ONE Theme
+   https://gib.work/bounty/a5ec2956-3f86-4a13-9fef-a3623c563a2e
+   reward~$150 | skills:rust | deadline:13.2d

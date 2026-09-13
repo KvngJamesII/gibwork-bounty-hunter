@@ -1,0 +1,102 @@
+import type { PublicTaskSummary } from "./publicApi.js";
+
+export interface RankedBounty {
+  task: PublicTaskSummary;
+  score: number;
+  reasons: string[];
+  usdEstimate: number;
+  daysLeft: number | null;
+}
+
+function parseUsd(task: PublicTaskSummary): number {
+  if (typeof task.asset?.price === "number") return task.asset.price;
+  const amount = Number(task.asset?.amount ?? 0);
+  const decimals = Number(task.asset?.decimals ?? 6);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return amount / 10 ** decimals;
+}
+
+function daysUntil(deadline?: string | null): number | null {
+  if (!deadline) return null;
+  const ms = Date.parse(deadline) - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  return ms / (1000 * 60 * 60 * 24);
+}
+
+export function rankBounties(
+  tasks: PublicTaskSummary[],
+  opts: { skills?: string[]; minUsd?: number; codingOnly?: boolean } = {},
+): RankedBounty[] {
+  const skills = (opts.skills ?? defaultSkills()).map((s) => s.toLowerCase());
+  const minUsd = opts.minUsd ?? 20;
+  const codingOnly = opts.codingOnly ?? true;
+
+  const ranked: RankedBounty[] = [];
+  for (const task of tasks) {
+    if (task.isOpen === false) continue;
+    const usd = parseUsd(task);
+    if (usd < minUsd) continue;
+
+    const hay = [
+      task.title ?? "",
+      task.primarySkill?.label ?? "",
+      task.primarySkill?.slug ?? "",
+      ...(task.tags ?? []),
+      stripHtml(task.content ?? "").slice(0, 500),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    if (codingOnly && !looksLikeCoding(hay)) continue;
+
+    const reasons: string[] = [];
+    let score = 0;
+
+    // Reward weight (log scale)
+    score += Math.min(40, Math.log10(usd + 1) * 18);
+    reasons.push(`reward~$${usd.toFixed(0)}`);
+
+    // Skill match
+    const matched = skills.filter((s) => hay.includes(s));
+    score += matched.length * 12;
+    if (matched.length) reasons.push(`skills:${matched.join(",")}`);
+
+    // Deadline urgency (prefer 3–21 days left)
+    const days = daysUntil(task.deadline);
+    if (days != null) {
+      if (days < 0) continue;
+      if (days <= 21) {
+        score += 10;
+        reasons.push(`deadline:${days.toFixed(1)}d`);
+      } else if (days > 60) {
+        score -= 5;
+      }
+    }
+
+    // Prefer Development-tagged / general coding
+    if ((task.tags ?? []).some((t) => /dev|code|typescript|rust|solana/i.test(t))) {
+      score += 8;
+      reasons.push("dev-tag");
+    }
+
+    ranked.push({ task, score, reasons, usdEstimate: usd, daysLeft: days });
+  }
+
+  return ranked.sort((a, b) => b.score - a.score);
+}
+
+function defaultSkills(): string[] {
+  const env = process.env.GIB_HUNT_SKILLS;
+  if (env) return env.split(",").map((s) => s.trim()).filter(Boolean);
+  return ["development", "typescript", "rust", "solana", "cli", "mcp", "sdk"];
+}
+
+function looksLikeCoding(hay: string): boolean {
+  return /(develop|code|typescript|javascript|rust|python|sdk|cli|mcp|api|solana|github|repo|backend|agent|automat)/i.test(
+    hay,
+  );
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
