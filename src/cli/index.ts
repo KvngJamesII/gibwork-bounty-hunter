@@ -315,7 +315,7 @@ program
       lines.push(`| - | --- | ----- | ----- | --- |`);
       ranked.forEach((r, i) => {
         lines.push(
-          `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.task.title.replace(/\\|/g, "/")} | ${taskUrl(r.task.id)} |`,
+          `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.task.title.replace(/\|/g, "/")} | ${taskUrl(r.task.id)} |`,
         );
       });
       lines.push("");

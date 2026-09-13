@@ -1,15 +1,15 @@
 # Gibwork overnight coding bounty report
 
-Generated: 2026-09-13T22:45:14.530Z
-Scanned pages: 2 × 25 (deduped by rank input)
-Filter: codingOnly, minUsd≥20, top 8
+Generated: 2026-09-13T22:45:29.684Z
+Scanned pages: 1 × 25 (deduped by rank input)
+Filter: codingOnly, minUsd≥20, top 5
 
 | # | USD | Score | Title | URL |
 | - | --- | ----- | ----- | --- |
-| 1 | $1000 | 96.0 | /G/i/b/w/o/r/k/ /D/e/v/e/l/o/p/e/r/ /H/a/c/k/a/t/h/o/n/ /B/o/u/n/t/y/ | https://gib.work/bounty/1052f22d-3f87-4b1d-b0d7-71a60679e7fa |
-| 2 | $220 | 62.0 | /S/h/a/r/e/ /H/o/w/ /Y/o/u/ /A/c/t/u/a/l/l/y/ /U/s/e/ /B/A/S/I/S/ /P/i/c/k/ /O/N/E/ /T/h/e/m/e/ | https://gib.work/bounty/8d21b03d-1649-479c-91c7-b73023af08b3 |
-| 3 | $150 | 61.2 | /S/h/a/r/e/ /Y/o/u/r/ /B/A/S/I/S/ /W/e/e/k/ /P/i/c/k/ /O/N/E/ /T/h/e/m/e/ | https://gib.work/bounty/a5ec2956-3f86-4a13-9fef-a3623c563a2e |
-| 4 | $50 | 60.7 | /A/x/z/r/a/ /o/u/t/r/e/a/c/h/ /A/g/e/n/t/'/s/ /B/o/u/n/t/y/ / | https://gib.work/bounty/ce839876-bf1f-42b7-914b-dd59f8fea1fb |
+| 1 | $1000 | 96.0 | Gibwork Developer Hackathon Bounty | https://gib.work/bounty/1052f22d-3f87-4b1d-b0d7-71a60679e7fa |
+| 2 | $220 | 62.0 | Share How You Actually Use BASIS Pick ONE Theme | https://gib.work/bounty/8d21b03d-1649-479c-91c7-b73023af08b3 |
+| 3 | $150 | 61.2 | Share Your BASIS Week Pick ONE Theme | https://gib.work/bounty/a5ec2956-3f86-4a13-9fef-a3623c563a2e |
+| 4 | $50 | 60.7 | Axzra outreach Agent's Bounty  | https://gib.work/bounty/ce839876-bf1f-42b7-914b-dd59f8fea1fb |
 
 ## Breakdown
 ### 1. Gibwork Developer Hackathon Bounty
