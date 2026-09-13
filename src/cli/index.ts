@@ -13,7 +13,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.0");
+  .version("0.2.1");
 
 program
   .command("explore")
@@ -270,6 +270,84 @@ program
     console.log(`Required: Google Form → Hackathon Discord role → attend ≥2 sessions`);
     console.log(`Deliverables: public GitHub + README + demo video + screenshots`);
   });
+
+
+program
+  .command("overnight-report")
+  .description("Write a markdown snapshot of top coding bounties ≥ min USD across pages")
+  .option("--min-usd <n>", "minimum USD", process.env.GIB_HUNT_MIN_USD ?? "20")
+  .option("--pages <n>", "explore pages to scan", "3")
+  .option("--limit <n>", "page size", "25")
+  .option("--top <n>", "top N to include", "15")
+  .option("-o, --out <path>", "output markdown path", "docs/overnight-bounty-report.md")
+  .option("--json", "also print JSON to stdout")
+  .action(async (opts) => {
+    const pages = Number(opts.pages);
+    const limit = Number(opts.limit);
+    const all: Awaited<ReturnType<typeof exploreTasks>>["results"] = [];
+    for (let page = 1; page <= pages; page++) {
+      try {
+        const { results } = await exploreTasks({ page, limit });
+        all.push(...results);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`explore page ${page} skipped: ${msg}`);
+        break;
+      }
+    }
+    const ranked = rankBounties(all, {
+      minUsd: Number(opts.minUsd),
+      codingOnly: true,
+    }).slice(0, Number(opts.top));
+    const now = new Date().toISOString();
+    const lines = [
+      `# Gibwork overnight coding bounty report`,
+      ``,
+      `Generated: ${now}`,
+      `Scanned pages: ${pages} × ${limit} (deduped by rank input)`,
+      `Filter: codingOnly, minUsd≥${opts.minUsd}, top ${opts.top}`,
+      ``,
+    ];
+    if (!ranked.length) {
+      lines.push(`_No matching coding bounties._`);
+    } else {
+      lines.push(`| # | USD | Score | Title | URL |`);
+      lines.push(`| - | --- | ----- | ----- | --- |`);
+      ranked.forEach((r, i) => {
+        lines.push(
+          `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.task.title.replace(/\\|/g, "/")} | ${taskUrl(r.task.id)} |`,
+        );
+      });
+      lines.push("");
+      lines.push("## Breakdown");
+      for (const [i, r] of ranked.entries()) {
+        lines.push(`### ${i + 1}. ${r.task.title}`);
+        lines.push(`- score ${r.score.toFixed(1)} · $${r.usdEstimate.toFixed(0)} · daysLeft=${r.daysLeft?.toFixed?.(1) ?? r.daysLeft}`);
+        lines.push(`- ${r.reasons.join(" | ")}`);
+        lines.push(`- ${taskUrl(r.task.id)}`);
+        lines.push("");
+      }
+    }
+    await mkdir("docs", { recursive: true });
+    await writeFile(opts.out, lines.join("\n") + "\n", "utf8");
+    console.log(`Wrote ${opts.out} (${ranked.length} bounties)`);
+    if (opts.json) {
+      console.log(
+        JSON.stringify(
+          ranked.map((r) => ({
+            score: r.score,
+            usd: r.usdEstimate,
+            id: r.task.id,
+            title: r.task.title,
+            url: taskUrl(r.task.id),
+          })),
+          null,
+          2,
+        ),
+      );
+    }
+  });
+
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);

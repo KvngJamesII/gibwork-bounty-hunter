@@ -22,3 +22,7 @@ Shipped without Phantom / approvals:
 5. **Samples** — `samples/mcp.cursor.json`, `mcp.claude-desktop.json`, `mcp.dev.json`; README MCP install section.
 
 **Do not** revive T3N. **No** Phantom signatures. Skip social/referral gib spam under $20.
+
+## Overnight deepen (v0.2.1)
+
+- Added `overnight-report` — markdown snapshot of top coding bounties (graceful stop when explore pagination requires auth).
