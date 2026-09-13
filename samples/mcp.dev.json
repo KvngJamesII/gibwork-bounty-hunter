@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "gibwork-bounty-hunter": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/absolute/path/to/gibwork-bounty-hunter/src/mcp/server.ts"
+      ],
+      "env": {
+        "GIB_HUNT_MIN_USD": "20"
+      }
+    }
+  }
+}

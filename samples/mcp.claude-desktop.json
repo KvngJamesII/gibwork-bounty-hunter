@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gibwork-bounty-hunter": {
+      "command": "node",
+      "args": ["/absolute/path/to/gibwork-bounty-hunter/dist/mcp/server.js"],
+      "env": {
+        "GIB_HUNT_MIN_USD": "20",
+        "GIBWORK_PRODUCTION": "true"
+      }
+    }
+  }
+}

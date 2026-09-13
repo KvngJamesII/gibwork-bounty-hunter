@@ -12,9 +12,11 @@ import {
 import { exploreTasks, getTask, taskUrl } from "../lib/publicApi.js";
 import { rankBounties } from "../lib/rank.js";
 import { draftSubmission } from "../lib/draft.js";
+import { runDoctorChecks } from "../lib/doctor.js";
+import { pollNewBounties } from "../lib/watch.js";
 
 const server = new Server(
-  { name: "gibwork-bounty-hunter", version: "0.1.0" },
+  { name: "gibwork-bounty-hunter", version: "0.2.0" },
   { capabilities: { tools: {} } },
 );
 
@@ -35,7 +37,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "gib_rank_coding_bounties",
       description:
-        "Rank coding/dev Gibwork bounties by reward, skill match, and deadline.",
+        "Rank coding/dev Gibwork bounties by reward, skill match, and deadline. Returns score breakdown.",
       inputSchema: {
         type: "object",
         properties: {
@@ -70,6 +72,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           repoUrl: { type: "string" },
         },
         required: ["taskId"],
+      },
+    },
+    {
+      name: "gib_watch_new_bounties",
+      description:
+        "One-shot poll for newly appearing bounties above minUsd. Uses a file-based seen cache (.cache/). Pass seedOnly=true to populate cache without alerts.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          minUsd: { type: "number" },
+          pages: { type: "number" },
+          search: { type: "string" },
+          seedOnly: { type: "boolean" },
+          cachePath: { type: "string" },
+        },
+      },
+    },
+    {
+      name: "gib_doctor",
+      description:
+        "Run environment checks: Node version, @gibwork/sdk presence, public API reachability, optional wallet SDK.",
+      inputSchema: {
+        type: "object",
+        properties: {},
       },
     },
   ],
@@ -111,9 +137,16 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           : undefined,
       }).slice(0, Number(args.top ?? 10));
       const slim = ranked.map((r) => ({
-        score: r.score,
+        score: Number(r.score.toFixed(2)),
         usd: r.usdEstimate,
         daysLeft: r.daysLeft,
+        breakdown: {
+          reward: Number(r.breakdown.reward.toFixed(2)),
+          skills: r.breakdown.skills,
+          deadline: r.breakdown.deadline,
+          tags: r.breakdown.tags,
+          matchedSkills: r.breakdown.matchedSkills,
+        },
         reasons: r.reasons,
         id: r.task.id,
         title: r.task.title,
@@ -139,6 +172,26 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         args.repoUrl ? String(args.repoUrl) : undefined,
       );
       return { content: [{ type: "text", text: md }] };
+    }
+
+    if (name === "gib_watch_new_bounties") {
+      const result = await pollNewBounties({
+        minUsd: args.minUsd != null ? Number(args.minUsd) : undefined,
+        pages: args.pages != null ? Number(args.pages) : undefined,
+        search: args.search ? String(args.search) : undefined,
+        seedOnly: Boolean(args.seedOnly),
+        cachePath: args.cachePath ? String(args.cachePath) : undefined,
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    if (name === "gib_doctor") {
+      const checks = await runDoctorChecks();
+      return {
+        content: [{ type: "text", text: JSON.stringify(checks, null, 2) }],
+      };
     }
 
     return {

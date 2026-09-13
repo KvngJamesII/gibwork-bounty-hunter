@@ -1,6 +1,6 @@
 {
   "name": "@idledev/gibwork-bounty-hunter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Non-web Gibwork use case: CLI + MCP agent that discovers, ranks, and drafts coding bounty work via @gibwork/sdk",
   "type": "module",
   "bin": {
@@ -41,5 +41,13 @@
     "@types/node": "^22.15.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.0"
-  }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    ".env.example",
+    "samples",
+    "docs"
+  ]
 }

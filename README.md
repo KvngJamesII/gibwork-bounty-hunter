@@ -2,11 +2,11 @@
 
 **Non-web Gibwork use case** for the [Gibwork Developer Hackathon Bounty](https://gib.work/bounty/1052f22d-3f87-4b1d-b0d7-71a60679e7fa) (up to **1000 USDC**, deadline **2026-10-30**).
 
-A terminal **CLI + MCP server** that helps developers and AI agents **discover, rank, and draft submissions** for coding bounties on Gibwork — using the official **`@gibwork/sdk`** (and public API fallback). Not a web app / dashboard.
+A terminal **CLI + MCP server** that helps developers and AI agents **discover, rank, watch, and draft submissions** for coding bounties on Gibwork — using the official **`@gibwork/sdk`** (and public API fallback). Not a web app / dashboard.
 
 | Piece | Role |
 | --- | --- |
-| `gib-hunt` CLI | explore / rank / show / draft / doctor |
+| `gib-hunt` CLI | explore / rank / show / draft / watch / alert / doctor |
 | MCP server | tools for Cursor / Claude / other agents |
 | `@gibwork/sdk` | wallet-authenticated discovery & submissions when a local keypair is configured |
 
@@ -15,9 +15,10 @@ A terminal **CLI + MCP server** that helps developers and AI agents **discover, 
 Browsing Gibwork in a browser does not fit agent workflows. Agents need **stdio tools** and **CLI commands** that:
 
 1. Pull open bounties
-2. Score them against skills + reward + deadline
-3. Emit a submission draft (repo + demo checklist) **before** paying the participation fee
-4. Optionally call the official SDK with a **local Solana keypair** (no Phantom / browser wallet)
+2. Score them against skills + reward + deadline (with transparent breakdown)
+3. Watch for newly posted high-value bounties (file-based seen cache)
+4. Emit a submission draft (repo + demo checklist) **before** paying the participation fee
+5. Optionally call the official SDK with a **local Solana keypair** (no Phantom / browser wallet)
 
 ## Requirements
 
@@ -31,7 +32,7 @@ git clone https://github.com/KvngJamesII/gibwork-bounty-hunter.git
 cd gibwork-bounty-hunter
 npm install
 npm run build
-npm link   # optional: puts gib-hunt on PATH
+npm link   # optional: puts gib-hunt + gibwork-bounty-hunter-mcp on PATH
 ```
 
 Copy `.env.example` → `.env` if you will use wallet-authenticated SDK methods.
@@ -40,37 +41,53 @@ Copy `.env.example` → `.env` if you will use wallet-authenticated SDK methods.
 
 ```bash
 # Public discovery (no wallet)
-npx tsx src/cli/index.ts explore --limit 10
-npx tsx src/cli/index.ts rank --top 5 --min-usd 50
-npx tsx src/cli/index.ts show 1052f22d-3f87-4b1d-b0d7-71a60679e7fa
-npx tsx src/cli/index.ts draft 1052f22d-3f87-4b1d-b0d7-71a60679e7fa \
+gib-hunt explore --limit 10
+gib-hunt rank --top 5 --min-usd 50
+gib-hunt rank --top 5 --table          # fixed-width score breakdown
+gib-hunt rank --top 5 --json           # JSON with breakdown object
+gib-hunt show 1052f22d-3f87-4b1d-b0d7-71a60679e7fa
+gib-hunt draft 1052f22d-3f87-4b1d-b0d7-71a60679e7fa \
   --repo https://github.com/KvngJamesII/gibwork-bounty-hunter
-npx tsx src/cli/index.ts doctor
-npx tsx src/cli/index.ts hackathon
+
+# New bounty alerts (seen IDs under .cache/gib-hunt-seen.json)
+gib-hunt watch --seed                  # seed cache without alerts
+gib-hunt watch --min-usd 50            # one-shot: print newly seen ≥$50
+gib-hunt alert --min-usd 100 --interval 300   # poll every 5 min
+
+gib-hunt doctor                        # Node / SDK / API health
+gib-hunt hackathon                     # IdleDev path notes
 ```
 
 After `npm run build`:
 
 ```bash
-node dist/cli/index.js rank --top 5
+node dist/cli/index.js rank --top 5 --table
 ```
 
-## MCP usage
+## MCP install (agents)
 
-Add to your MCP client config (example Cursor / Claude Desktop):
+Copy a sample from `samples/` and replace `/absolute/path/to/...` with your clone path.
+
+**Cursor** (`samples/mcp.cursor.json`):
 
 ```json
 {
   "mcpServers": {
     "gibwork-bounty-hunter": {
       "command": "node",
-      "args": ["/absolute/path/to/gibwork-bounty-hunter/dist/mcp/server.js"]
+      "args": ["/absolute/path/to/gibwork-bounty-hunter/dist/mcp/server.js"],
+      "env": {
+        "GIB_HUNT_MIN_USD": "20",
+        "GIB_HUNT_SKILLS": "development,typescript,rust,solana,cli,mcp,sdk"
+      }
     }
   }
 }
 ```
 
-Or during development:
+**Claude Desktop** — same shape (`samples/mcp.claude-desktop.json`).
+
+**Dev (tsx, no build)** — `samples/mcp.dev.json`:
 
 ```json
 {
@@ -83,34 +100,56 @@ Or during development:
 }
 ```
 
+Or after `npm link`:
+
+```json
+{
+  "mcpServers": {
+    "gibwork-bounty-hunter": {
+      "command": "gibwork-bounty-hunter-mcp"
+    }
+  }
+}
+```
+
 ### Tools
 
 | Tool | Description |
 | --- | --- |
 | `gib_explore_bounties` | List open bounties |
-| `gib_rank_coding_bounties` | Rank coding/dev bounties |
+| `gib_rank_coding_bounties` | Rank coding/dev bounties (includes score breakdown) |
 | `gib_get_bounty` | Fetch one bounty by UUID |
 | `gib_draft_submission` | Markdown submission draft (no payment) |
+| `gib_watch_new_bounties` | One-shot poll for newly appearing ≥minUsd bounties |
+| `gib_doctor` | Node / SDK / public API health checks |
 
 ## Official Gibwork toolset used
 
 - **`@gibwork/sdk`** — TypeScript client for wallet-authenticated External API (`tasks.listAvailable`, submissions, etc.)
 - Optional companion packages from Gibwork: `@gibwork/cli`, `@gibwork/mcp`
-- Public REST fallback: `https://api2.gib.work/explore` and `/tasks/{id}` when no keypair is present
+- Public REST fallback: `https://api.gib.work/explore` and `https://gib.work/api/tasks/{id}` when no keypair is present
 
 ## Sample output
 
 ```text
-$ gib-hunt rank --top 3 --min-usd 20
-1. score=52.3 $1000 — Gibwork Developer Hackathon Bounty
-   https://gib.work/bounty/1052f22d-...
-   reward~$1000 | skills:development,sdk,cli,mcp | deadline:46.2d | dev-tag
+$ gib-hunt rank --top 3 --min-usd 20 --table
+ #  SCORE  USD    DAYS  REW  SKL  DLN  TAG  TITLE
+----------------------------------------------------------------------------------------------------
+ 1   72.1  $1000    47   36   36    0    0  Gibwork Developer Hackathon Bounty
+```
+
+```text
+$ gib-hunt watch --min-usd 50
+New bounties (1) ≥$50:
+- $200 — Example coding bounty
+  https://gib.work/bounty/...
+Cache: .cache/gib-hunt-seen.json (12 seen)
 ```
 
 ## Safety / non-goals
 
 - **No Phantom signatures** — local keypair only
-- **No automatic paid submissions** in v0.1 — drafts only until you explicitly wire `submissions.create` with a persisted idempotency key
+- **No automatic paid submissions** in v0.2 — drafts only until you explicitly wire `submissions.create` with a persisted idempotency key
 - Does **not** fake Discord attendance (human must join + attend ≥2 sessions)
 
 ## Hackathon path (IdleDev)

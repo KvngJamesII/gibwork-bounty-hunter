@@ -2,9 +2,10 @@
 import { Command } from "commander";
 import { writeFile, mkdir } from "node:fs/promises";
 import { exploreTasks, getTask, taskUrl } from "../lib/publicApi.js";
-import { rankBounties } from "../lib/rank.js";
+import { formatRankTable, rankBounties } from "../lib/rank.js";
 import { draftSubmission } from "../lib/draft.js";
-import { tryCreateSdkClient } from "../lib/client.js";
+import { formatDoctorReport, runDoctorChecks } from "../lib/doctor.js";
+import { pollNewBounties, sleep } from "../lib/watch.js";
 
 const program = new Command();
 program
@@ -12,7 +13,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.1.0");
+  .version("0.2.0");
 
 program
   .command("explore")
@@ -54,7 +55,8 @@ program
   .option("--min-usd <n>", "minimum USD reward", process.env.GIB_HUNT_MIN_USD ?? "20")
   .option("--skills <list>", "comma-separated skill keywords")
   .option("--top <n>", "show top N", "10")
-  .option("--json", "JSON output")
+  .option("--table", "fixed-width breakdown table")
+  .option("--json", "JSON output with full score breakdown")
   .action(async (opts) => {
     const { results } = await exploreTasks({
       page: Number(opts.page),
@@ -68,18 +70,48 @@ program
       minUsd: Number(opts.minUsd),
     }).slice(0, Number(opts.top));
     if (opts.json) {
-      console.log(JSON.stringify(ranked, null, 2));
+      const payload = ranked.map((r) => ({
+        score: Number(r.score.toFixed(2)),
+        usd: r.usdEstimate,
+        daysLeft: r.daysLeft,
+        breakdown: {
+          reward: Number(r.breakdown.reward.toFixed(2)),
+          skills: r.breakdown.skills,
+          deadline: r.breakdown.deadline,
+          tags: r.breakdown.tags,
+          matchedSkills: r.breakdown.matchedSkills,
+        },
+        reasons: r.reasons,
+        id: r.task.id,
+        title: r.task.title,
+        url: taskUrl(r.task.id),
+        tags: r.task.tags,
+      }));
+      console.log(JSON.stringify(payload, null, 2));
       return;
     }
     if (!ranked.length) {
       console.log("No matching coding bounties on this page.");
       return;
     }
+    if (opts.table) {
+      console.log(formatRankTable(ranked));
+      console.log("");
+      console.log("Legend: REW=reward SKL=skills DLN=deadline TAG=dev-tag");
+      return;
+    }
     for (const [i, r] of ranked.entries()) {
+      const b = r.breakdown;
       console.log(
         `${i + 1}. score=${r.score.toFixed(1)} $${r.usdEstimate.toFixed(0)} — ${r.task.title}`,
       );
       console.log(`   ${taskUrl(r.task.id)}`);
+      console.log(
+        `   breakdown: reward=${b.reward.toFixed(1)} skills=${b.skills} deadline=${b.deadline} tags=${b.tags}` +
+          (b.matchedSkills.length
+            ? ` matched=[${b.matchedSkills.join(",")}]`
+            : ""),
+      );
       console.log(`   ${r.reasons.join(" | ")}`);
     }
   });
@@ -121,35 +153,110 @@ program
 
 program
   .command("doctor")
-  .description("Check Node version, env, and optional SDK wallet client")
-  .action(async () => {
-    console.log(`node ${process.version}`);
-    console.log(`GIBWORK_PRODUCTION=${process.env.GIBWORK_PRODUCTION ?? "true"}`);
-    const sdk = await tryCreateSdkClient();
-    if (sdk.ok) {
-      console.log(`SDK client: OK (${sdk.walletHint})`);
-      try {
-        const page = await sdk.client.tasks.listAvailable({ page: 1, limit: 3 });
-        console.log(
-          `SDK listAvailable: ${Array.isArray(page.results) ? page.results.length : "?"} results`,
-        );
-      } catch (err) {
-        console.log(
-          `SDK listAvailable error: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+  .description("Check Node version, SDK package, public API reachability, optional wallet")
+  .option("--json", "JSON output")
+  .action(async (opts) => {
+    const checks = await runDoctorChecks();
+    if (opts.json) {
+      console.log(JSON.stringify(checks, null, 2));
     } else {
-      console.log(`SDK client: skipped — ${sdk.reason}`);
+      console.log(formatDoctorReport(checks));
     }
-    try {
-      const { results } = await exploreTasks({ page: 1, limit: 5 });
-      console.log(`Public explore: ${results.length} results`);
-    } catch (err) {
-      console.log(
-        `Public explore error: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    if (checks.some((c) => c.status === "fail")) process.exitCode = 1;
   });
+
+type WatchOpts = {
+  minUsd: string;
+  interval: string;
+  pages: string;
+  search?: string;
+  seed?: boolean;
+  json?: boolean;
+  cache?: string;
+};
+
+async function runWatch(opts: WatchOpts): Promise<void> {
+  const intervalSec = Number(opts.interval);
+  const once = !Number.isFinite(intervalSec) || intervalSec <= 0;
+
+  const runOnce = async () => {
+    const result = await pollNewBounties({
+      minUsd: Number(opts.minUsd),
+      pages: Number(opts.pages),
+      search: opts.search,
+      seedOnly: Boolean(opts.seed),
+      cachePath: opts.cache,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    if (opts.seed) {
+      console.log(
+        `Seeded cache with ${result.seenCount} seen ids (scanned ${result.scanned}).`,
+      );
+      console.log(`Cache: ${result.cachePath}`);
+      return;
+    }
+    if (!result.newHits.length) {
+      console.log(
+        `No new bounties ≥$${opts.minUsd} (scanned ${result.scanned}, seen ${result.seenCount}).`,
+      );
+      return;
+    }
+    console.log(`New bounties (${result.newHits.length}) ≥$${opts.minUsd}:`);
+    for (const h of result.newHits) {
+      console.log(`- $${h.usd.toFixed(0)} — ${h.title}`);
+      console.log(`  ${h.url}`);
+    }
+    console.log(`Cache: ${result.cachePath} (${result.seenCount} seen)`);
+  };
+
+  if (once) {
+    await runOnce();
+    return;
+  }
+
+  console.log(
+    `Watching every ${intervalSec}s for new bounties ≥$${opts.minUsd} (Ctrl+C to stop)…`,
+  );
+  // Seed first so the initial page isn't all "new"
+  await pollNewBounties({
+    minUsd: Number(opts.minUsd),
+    pages: Number(opts.pages),
+    search: opts.search,
+    seedOnly: true,
+    cachePath: opts.cache,
+  });
+  for (;;) {
+    await runOnce();
+    await sleep(intervalSec * 1000);
+  }
+}
+
+const watchOpts = (cmd: Command) =>
+  cmd
+    .option("--min-usd <n>", "minimum USD reward", process.env.GIB_HUNT_MIN_USD ?? "20")
+    .option("--interval <sec>", "poll interval seconds (0 = once)", "0")
+    .option("--pages <n>", "explore pages per poll", "2")
+    .option("-s, --search <q>", "search query")
+    .option("--seed", "seed seen-cache with current listings (no alerts)")
+    .option("--json", "JSON output")
+    .option("--cache <path>", "override seen-cache path");
+
+watchOpts(
+  program
+    .command("watch")
+    .description(
+      "Poll open bounties and print newly appearing ones above min USD (seen cache under .cache/)",
+    ),
+).action(async (opts: WatchOpts) => runWatch(opts));
+
+watchOpts(
+  program
+    .command("alert")
+    .description("Alias for watch — one-shot or interval poll for new high-value bounties"),
+).action(async (opts: WatchOpts) => runWatch(opts));
 
 program
   .command("hackathon")

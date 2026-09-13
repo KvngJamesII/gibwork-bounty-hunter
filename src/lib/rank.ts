@@ -1,11 +1,21 @@
 import type { PublicTaskSummary } from "./publicApi.js";
 
+/** Per-component score contribution for transparent ranking. */
+export interface ScoreBreakdown {
+  reward: number;
+  skills: number;
+  deadline: number;
+  tags: number;
+  matchedSkills: string[];
+}
+
 export interface RankedBounty {
   task: PublicTaskSummary;
   score: number;
   reasons: string[];
   usdEstimate: number;
   daysLeft: number | null;
+  breakdown: ScoreBreakdown;
 }
 
 function parseUsd(task: PublicTaskSummary): number {
@@ -50,39 +60,89 @@ export function rankBounties(
     if (codingOnly && !looksLikeCoding(hay)) continue;
 
     const reasons: string[] = [];
-    let score = 0;
+    const breakdown: ScoreBreakdown = {
+      reward: 0,
+      skills: 0,
+      deadline: 0,
+      tags: 0,
+      matchedSkills: [],
+    };
 
-    // Reward weight (log scale)
-    score += Math.min(40, Math.log10(usd + 1) * 18);
-    reasons.push(`reward~$${usd.toFixed(0)}`);
+    // Reward weight (log scale, cap 40)
+    breakdown.reward = Math.min(40, Math.log10(usd + 1) * 18);
+    reasons.push(`reward~$${usd.toFixed(0)}(+${breakdown.reward.toFixed(1)})`);
 
     // Skill match
     const matched = skills.filter((s) => hay.includes(s));
-    score += matched.length * 12;
-    if (matched.length) reasons.push(`skills:${matched.join(",")}`);
+    breakdown.matchedSkills = matched;
+    breakdown.skills = matched.length * 12;
+    if (matched.length) {
+      reasons.push(`skills:${matched.join(",")}(+${breakdown.skills})`);
+    }
 
     // Deadline urgency (prefer 3–21 days left)
     const days = daysUntil(task.deadline);
     if (days != null) {
       if (days < 0) continue;
       if (days <= 21) {
-        score += 10;
-        reasons.push(`deadline:${days.toFixed(1)}d`);
+        breakdown.deadline = 10;
+        reasons.push(`deadline:${days.toFixed(1)}d(+10)`);
+      } else if (days <= 45) {
+        breakdown.deadline = 5;
+        reasons.push(`deadline:${days.toFixed(1)}d(+5)`);
       } else if (days > 60) {
-        score -= 5;
+        breakdown.deadline = -5;
+        reasons.push(`deadline:${days.toFixed(1)}d(-5)`);
+      } else {
+        reasons.push(`deadline:${days.toFixed(1)}d(+0)`);
       }
     }
 
     // Prefer Development-tagged / general coding
     if ((task.tags ?? []).some((t) => /dev|code|typescript|rust|solana/i.test(t))) {
-      score += 8;
-      reasons.push("dev-tag");
+      breakdown.tags = 8;
+      reasons.push("dev-tag(+8)");
     }
 
-    ranked.push({ task, score, reasons, usdEstimate: usd, daysLeft: days });
+    const score =
+      breakdown.reward + breakdown.skills + breakdown.deadline + breakdown.tags;
+
+    ranked.push({
+      task,
+      score,
+      reasons,
+      usdEstimate: usd,
+      daysLeft: days,
+      breakdown,
+    });
   }
 
   return ranked.sort((a, b) => b.score - a.score);
+}
+
+/** Format a human-readable score table (fixed-width columns). */
+export function formatRankTable(ranked: RankedBounty[]): string {
+  if (!ranked.length) return "(no matches)";
+  const header =
+    " #  SCORE  USD    DAYS  REW  SKL  DLN  TAG  TITLE";
+  const sep = "-".repeat(Math.min(100, header.length + 40));
+  const rows = ranked.map((r, i) => {
+    const days =
+      r.daysLeft == null ? "  n/a" : r.daysLeft.toFixed(0).padStart(5);
+    const title = (r.task.title ?? "").slice(0, 48);
+    return [
+      String(i + 1).padStart(2),
+      r.score.toFixed(1).padStart(6),
+      ("$" + r.usdEstimate.toFixed(0)).padStart(6),
+      days,
+      r.breakdown.reward.toFixed(0).padStart(4),
+      r.breakdown.skills.toFixed(0).padStart(4),
+      r.breakdown.deadline.toFixed(0).padStart(4),
+      r.breakdown.tags.toFixed(0).padStart(4),
+      " " + title,
+    ].join(" ");
+  });
+  return [header, sep, ...rows].join("\n");
 }
 
 function defaultSkills(): string[] {
