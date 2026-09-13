@@ -6,7 +6,7 @@ A terminal **CLI + MCP server** that helps developers and AI agents **discover, 
 
 | Piece | Role |
 | --- | --- |
-| `gib-hunt` CLI | explore / rank / show / draft / watch / alert / doctor |
+| `gib-hunt` CLI | explore / rank / show / draft / apply-pack / overnight-report / watch / alert / doctor |
 | MCP server | tools for Cursor / Claude / other agents |
 | `@gibwork/sdk` | wallet-authenticated discovery & submissions when a local keypair is configured |
 
@@ -48,6 +48,14 @@ gib-hunt rank --top 5 --json           # JSON with breakdown object
 gib-hunt show 1052f22d-3f87-4b1d-b0d7-71a60679e7fa
 gib-hunt draft 1052f22d-3f87-4b1d-b0d7-71a60679e7fa \
   --repo https://github.com/KvngJamesII/gibwork-bounty-hunter
+
+# Apply / submission pack (agent-friendly markdown)
+gib-hunt apply-pack 1052f22d-3f87-4b1d-b0d7-71a60679e7fa \
+  --repo https://github.com/KvngJamesII/gibwork-bounty-hunter -o apply-pack.md
+gib-hunt submission-pack 1052f22d-3f87-4b1d-b0d7-71a60679e7fa   # alias → stdout
+
+# Overnight coding snapshot (+ .cache/overnight-report.md)
+gib-hunt overnight-report --min-usd 20 --top 10
 
 # New bounty alerts (seen IDs under .cache/gib-hunt-seen.json)
 gib-hunt watch --seed                  # seed cache without alerts
@@ -120,6 +128,8 @@ Or after `npm link`:
 | `gib_rank_coding_bounties` | Rank coding/dev bounties (includes score breakdown) |
 | `gib_get_bounty` | Fetch one bounty by UUID |
 | `gib_draft_submission` | Markdown submission draft (no payment) |
+| `gib_apply_pack` | Apply/submission pack (outline + checklist; UUID or slug) |
+| `gib_overnight_report` | Overnight coding bounty snapshot + skill-match scores |
 | `gib_watch_new_bounties` | One-shot poll for newly appearing ≥minUsd bounties |
 | `gib_doctor` | Node / SDK / public API health checks |
 
@@ -149,7 +159,7 @@ Cache: .cache/gib-hunt-seen.json (12 seen)
 ## Safety / non-goals
 
 - **No Phantom signatures** — local keypair only
-- **No automatic paid submissions** in v0.2 — drafts only until you explicitly wire `submissions.create` with a persisted idempotency key
+- **No automatic paid submissions** in v0.2.x — drafts / apply-packs only until you explicitly wire `submissions.create` with a persisted idempotency key
 - Does **not** fake Discord attendance (human must join + attend ≥2 sessions)
 
 ## Hackathon path (IdleDev)

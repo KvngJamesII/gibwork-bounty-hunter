@@ -2,8 +2,9 @@
 import { Command } from "commander";
 import { writeFile, mkdir } from "node:fs/promises";
 import { exploreTasks, getTask, taskUrl } from "../lib/publicApi.js";
-import { formatRankTable, rankBounties } from "../lib/rank.js";
+import { formatRankTable, rankBounties, AGENT_DEFAULT_SKILLS } from "../lib/rank.js";
 import { draftSubmission } from "../lib/draft.js";
+import { buildApplyPackForId } from "../lib/applyPack.js";
 import { formatDoctorReport, runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties, sleep } from "../lib/watch.js";
 
@@ -13,7 +14,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.1");
+  .version("0.2.2");
 
 program
   .command("explore")
@@ -151,6 +152,54 @@ program
     console.log(`Wrote ${opts.out}`);
   });
 
+async function runApplyPack(
+  taskId: string,
+  opts: { repo?: string; out?: string; stdout?: boolean; skills?: string },
+): Promise<void> {
+  const skills = opts.skills
+    ? String(opts.skills).split(",").map((s: string) => s.trim()).filter(Boolean)
+    : [...AGENT_DEFAULT_SKILLS];
+  const { task, markdown } = await buildApplyPackForId(taskId, {
+    repoUrl: opts.repo,
+    skills,
+  });
+  if (opts.stdout || !opts.out) {
+    process.stdout.write(markdown);
+  }
+  if (opts.out) {
+    await writeFile(opts.out, markdown, "utf8");
+    console.error(`Wrote ${opts.out} for ${task.id}`);
+  } else if (!opts.stdout) {
+    // default: stdout only when no -o
+  }
+}
+
+const applyPackOpts = (cmd: Command) =>
+  cmd
+    .argument("<taskIdOrSlug>", "Gibwork task UUID or slug")
+    .option("--repo <url>", "public GitHub repo URL")
+    .option(
+      "--skills <list>",
+      "comma-separated skills for match score",
+      AGENT_DEFAULT_SKILLS.join(","),
+    )
+    .option("-o, --out <path>", "write markdown to file (also prints if --stdout)")
+    .option("--stdout", "force print markdown to stdout");
+
+applyPackOpts(
+  program
+    .command("apply-pack")
+    .description(
+      "Emit a markdown apply/submission pack (title, reward, skills, deadline, outline, checklist)",
+    ),
+).action(async (taskId: string, opts) => runApplyPack(taskId, opts));
+
+applyPackOpts(
+  program
+    .command("submission-pack")
+    .description("Alias for apply-pack — markdown pack for human/agent submit"),
+).action(async (taskId: string, opts) => runApplyPack(taskId, opts));
+
 program
   .command("doctor")
   .description("Check Node version, SDK package, public API reachability, optional wallet")
@@ -274,16 +323,32 @@ program
 
 program
   .command("overnight-report")
-  .description("Write a markdown snapshot of top coding bounties ≥ min USD across pages")
+  .description(
+    "Write a markdown snapshot of top coding bounties ≥ min USD (docs + .cache) with skill-match scores",
+  )
   .option("--min-usd <n>", "minimum USD", process.env.GIB_HUNT_MIN_USD ?? "20")
   .option("--pages <n>", "explore pages to scan", "3")
   .option("--limit <n>", "page size", "25")
   .option("--top <n>", "top N to include", "15")
-  .option("-o, --out <path>", "output markdown path", "docs/overnight-bounty-report.md")
+  .option(
+    "--skills <list>",
+    "comma-separated skills for match score",
+    AGENT_DEFAULT_SKILLS.join(","),
+  )
+  .option("-o, --out <path>", "primary output markdown path", "docs/overnight-bounty-report.md")
+  .option(
+    "--cache-out <path>",
+    "also write cache copy",
+    ".cache/overnight-report.md",
+  )
   .option("--json", "also print JSON to stdout")
   .action(async (opts) => {
     const pages = Number(opts.pages);
     const limit = Number(opts.limit);
+    const skills = String(opts.skills)
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
     const all: Awaited<ReturnType<typeof exploreTasks>>["results"] = [];
     for (let page = 1; page <= pages; page++) {
       try {
@@ -298,6 +363,7 @@ program
     const ranked = rankBounties(all, {
       minUsd: Number(opts.minUsd),
       codingOnly: true,
+      skills,
     }).slice(0, Number(opts.top));
     const now = new Date().toISOString();
     const lines = [
@@ -306,37 +372,56 @@ program
       `Generated: ${now}`,
       `Scanned pages: ${pages} × ${limit} (deduped by rank input)`,
       `Filter: codingOnly, minUsd≥${opts.minUsd}, top ${opts.top}`,
+      `Skill list: ${skills.join(", ")}`,
       ``,
     ];
     if (!ranked.length) {
       lines.push(`_No matching coding bounties._`);
     } else {
-      lines.push(`| # | USD | Score | Title | URL |`);
-      lines.push(`| - | --- | ----- | ----- | --- |`);
+      lines.push(`| # | USD | Score | Skill pts | Matched | Title | URL |`);
+      lines.push(`| - | --- | ----- | --------- | ------- | ----- | --- |`);
       ranked.forEach((r, i) => {
+        const matched = r.breakdown.matchedSkills.join(", ") || "—";
         lines.push(
-          `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.task.title.replace(/\|/g, "/")} | ${taskUrl(r.task.id)} |`,
+          `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.breakdown.skills} | ${matched} | ${r.task.title.replace(/\|/g, "/")} | ${taskUrl(r.task.id)} |`,
         );
+      });
+      lines.push("");
+      lines.push("## Top by reward (skill match)");
+      const byReward = [...ranked].sort((a, b) => b.usdEstimate - a.usdEstimate);
+      byReward.forEach((r, i) => {
+        lines.push(
+          `${i + 1}. $${r.usdEstimate.toFixed(0)} · skill=${r.breakdown.skills} [${r.breakdown.matchedSkills.join(", ") || "none"}] · ${r.task.title}`,
+        );
+        lines.push(`   ${taskUrl(r.task.id)}`);
       });
       lines.push("");
       lines.push("## Breakdown");
       for (const [i, r] of ranked.entries()) {
         lines.push(`### ${i + 1}. ${r.task.title}`);
-        lines.push(`- score ${r.score.toFixed(1)} · $${r.usdEstimate.toFixed(0)} · daysLeft=${r.daysLeft?.toFixed?.(1) ?? r.daysLeft}`);
+        lines.push(
+          `- score ${r.score.toFixed(1)} · $${r.usdEstimate.toFixed(0)} · skillMatch=${r.breakdown.skills} [${r.breakdown.matchedSkills.join(", ") || "none"}] · daysLeft=${r.daysLeft?.toFixed?.(1) ?? r.daysLeft}`,
+        );
         lines.push(`- ${r.reasons.join(" | ")}`);
         lines.push(`- ${taskUrl(r.task.id)}`);
         lines.push("");
       }
     }
+    const body = lines.join("\n") + "\n";
     await mkdir("docs", { recursive: true });
-    await writeFile(opts.out, lines.join("\n") + "\n", "utf8");
-    console.log(`Wrote ${opts.out} (${ranked.length} bounties)`);
+    await writeFile(opts.out, body, "utf8");
+    const cachePath = String(opts.cacheOut);
+    await mkdir(".cache", { recursive: true });
+    await writeFile(cachePath, body, "utf8");
+    console.log(`Wrote ${opts.out} and ${cachePath} (${ranked.length} bounties)`);
     if (opts.json) {
       console.log(
         JSON.stringify(
           ranked.map((r) => ({
             score: r.score,
             usd: r.usdEstimate,
+            skillMatch: r.breakdown.skills,
+            matchedSkills: r.breakdown.matchedSkills,
             id: r.task.id,
             title: r.task.title,
             url: taskUrl(r.task.id),
@@ -347,7 +432,6 @@ program
       );
     }
   });
-
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);

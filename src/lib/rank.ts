@@ -145,10 +145,25 @@ export function formatRankTable(ranked: RankedBounty[]): string {
   return [header, sep, ...rows].join("\n");
 }
 
-function defaultSkills(): string[] {
+/** Default skill list for agent overnight scoring (typescript/solana/react/rust/python). */
+export const AGENT_DEFAULT_SKILLS = [
+  "typescript",
+  "solana",
+  "react",
+  "rust",
+  "python",
+] as const;
+
+export function defaultSkills(): string[] {
   const env = process.env.GIB_HUNT_SKILLS;
   if (env) return env.split(",").map((s) => s.trim()).filter(Boolean);
-  return ["development", "typescript", "rust", "solana", "cli", "mcp", "sdk"];
+  return [
+    "development",
+    ...AGENT_DEFAULT_SKILLS,
+    "cli",
+    "mcp",
+    "sdk",
+  ];
 }
 
 function looksLikeCoding(hay: string): boolean {

@@ -10,13 +10,15 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { exploreTasks, getTask, taskUrl } from "../lib/publicApi.js";
-import { rankBounties } from "../lib/rank.js";
+import { rankBounties, AGENT_DEFAULT_SKILLS } from "../lib/rank.js";
 import { draftSubmission } from "../lib/draft.js";
+import { buildApplyPackForId } from "../lib/applyPack.js";
 import { runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties } from "../lib/watch.js";
+import { writeFile, mkdir } from "node:fs/promises";
 
 const server = new Server(
-  { name: "gibwork-bounty-hunter", version: "0.2.0" },
+  { name: "gibwork-bounty-hunter", version: "0.2.2" },
   { capabilities: { tools: {} } },
 );
 
@@ -96,6 +98,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: {
         type: "object",
         properties: {},
+      },
+    },
+    {
+      name: "gib_apply_pack",
+      description:
+        "Build a markdown apply/submission pack for a bounty (title, reward, skills, deadline, outline, checklist). Accepts UUID or slug.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taskIdOrSlug: { type: "string" },
+          repoUrl: { type: "string" },
+          skills: { type: "array", items: { type: "string" } },
+        },
+        required: ["taskIdOrSlug"],
+      },
+    },
+    {
+      name: "gib_overnight_report",
+      description:
+        "Scan explore pages and write/return an overnight coding bounty report with skill-match scores vs default agent skills. Also writes .cache/overnight-report.md when writeCache is true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          minUsd: { type: "number" },
+          pages: { type: "number" },
+          limit: { type: "number" },
+          top: { type: "number" },
+          skills: { type: "array", items: { type: "string" } },
+          writeCache: { type: "boolean" },
+        },
       },
     },
   ],
@@ -191,6 +223,75 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const checks = await runDoctorChecks();
       return {
         content: [{ type: "text", text: JSON.stringify(checks, null, 2) }],
+      };
+    }
+
+    if (name === "gib_apply_pack") {
+      const skills = Array.isArray(args.skills)
+        ? (args.skills as string[])
+        : [...AGENT_DEFAULT_SKILLS];
+      const { markdown } = await buildApplyPackForId(String(args.taskIdOrSlug), {
+        repoUrl: args.repoUrl ? String(args.repoUrl) : undefined,
+        skills,
+      });
+      return { content: [{ type: "text", text: markdown }] };
+    }
+
+    if (name === "gib_overnight_report") {
+      const pages = Number(args.pages ?? 3);
+      const limit = Number(args.limit ?? 15);
+      const top = Number(args.top ?? 15);
+      const minUsd = args.minUsd != null ? Number(args.minUsd) : 20;
+      const skills = Array.isArray(args.skills)
+        ? (args.skills as string[])
+        : [...AGENT_DEFAULT_SKILLS];
+      const all: Awaited<ReturnType<typeof exploreTasks>>["results"] = [];
+      for (let page = 1; page <= pages; page++) {
+        try {
+          const { results } = await exploreTasks({ page, limit });
+          all.push(...results);
+        } catch {
+          break;
+        }
+      }
+      const ranked = rankBounties(all, {
+        minUsd,
+        codingOnly: true,
+        skills,
+      }).slice(0, top);
+      const slim = ranked.map((r) => ({
+        score: Number(r.score.toFixed(2)),
+        usd: r.usdEstimate,
+        skillMatch: r.breakdown.skills,
+        matchedSkills: r.breakdown.matchedSkills,
+        id: r.task.id,
+        title: r.task.title,
+        url: taskUrl(r.task.id),
+      }));
+      if (args.writeCache !== false) {
+        const lines = [
+          `# Gibwork overnight coding bounty report`,
+          ``,
+          `Generated: ${new Date().toISOString()}`,
+          `Skill list: ${skills.join(", ")}`,
+          ``,
+          `| # | USD | Score | Skill pts | Matched | Title | URL |`,
+          `| - | --- | ----- | --------- | ------- | ----- | --- |`,
+          ...ranked.map(
+            (r, i) =>
+              `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.breakdown.skills} | ${r.breakdown.matchedSkills.join(", ") || "—"} | ${r.task.title.replace(/\|/g, "/")} | ${taskUrl(r.task.id)} |`,
+          ),
+          ``,
+        ];
+        await mkdir(".cache", { recursive: true });
+        await writeFile(
+          ".cache/overnight-report.md",
+          lines.join("\n") + "\n",
+          "utf8",
+        );
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(slim, null, 2) }],
       };
     }
 

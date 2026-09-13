@@ -26,3 +26,14 @@ Shipped without Phantom / approvals:
 ## Overnight deepen (v0.2.1)
 
 - Added `overnight-report` — markdown snapshot of top coding bounties (graceful stop when explore pagination requires auth).
+
+## Overnight deepen (v0.2.2)
+
+Shipped without Phantom / Discord / approvals:
+
+1. **`apply-pack` / `submission-pack`** — markdown pack for a task id/slug: title, reward, skills, deadline, draft outline, submission checklist (stdout or `-o` file).
+2. **`overnight-report`** — also writes `.cache/overnight-report.md`; ranks with skill match vs default list `typescript,solana,react,rust,python` (overridable via `--skills`); table includes skill pts + matched skills; top-by-reward section.
+3. **MCP parity** — `gib_apply_pack`, `gib_overnight_report` (optional cache write).
+4. Version bump **0.2.2**; README CLI/MCP tables updated.
+
+**Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
