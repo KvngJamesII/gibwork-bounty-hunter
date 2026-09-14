@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { exploreTasks, getTask, taskUrl } from "../lib/publicApi.js";
 import { rankBounties, AGENT_DEFAULT_SKILLS } from "../lib/rank.js";
+import { buildOvernightReport } from "../lib/overnightReport.js";
 import { draftSubmission } from "../lib/draft.js";
 import { buildApplyPackForId } from "../lib/applyPack.js";
 import { runDoctorChecks } from "../lib/doctor.js";
@@ -117,7 +118,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "gib_overnight_report",
       description:
-        "Scan explore pages and write/return an overnight coding bounty report with skill-match scores vs default agent skills. Also writes .cache/overnight-report.md when writeCache is true.",
+        "Scan explore pages; overnight report with skip reasons, AGENT_OR_EMAIL_SUBMIT vs HUMAN_BLOCKER tags, cache delta, skill scores. Writes .cache/overnight-report.md when writeCache is true.",
       inputSchema: {
         type: "object",
         properties: {
@@ -246,22 +247,28 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         ? (args.skills as string[])
         : [...AGENT_DEFAULT_SKILLS];
       const all: Awaited<ReturnType<typeof exploreTasks>>["results"] = [];
+      let pagesScanned = 0;
       for (let page = 1; page <= pages; page++) {
         try {
           const { results } = await exploreTasks({ page, limit });
           all.push(...results);
+          pagesScanned = page;
         } catch {
           break;
         }
       }
-      const ranked = rankBounties(all, {
+      const report = await buildOvernightReport(all, {
         minUsd,
-        codingOnly: true,
+        top,
         skills,
-      }).slice(0, top);
-      const slim = ranked.map((r) => ({
+        pagesScanned,
+        pageSize: limit,
+      });
+      const slim = report.tagged.map(({ ranked: r, submit }) => ({
         score: Number(r.score.toFixed(2)),
         usd: r.usdEstimate,
+        tag: submit.tag,
+        blockers: submit.blockers,
         skillMatch: r.breakdown.skills,
         matchedSkills: r.breakdown.matchedSkills,
         id: r.task.id,
@@ -269,29 +276,29 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         url: taskUrl(r.task.id),
       }));
       if (args.writeCache !== false) {
-        const lines = [
-          `# Gibwork overnight coding bounty report`,
-          ``,
-          `Generated: ${new Date().toISOString()}`,
-          `Skill list: ${skills.join(", ")}`,
-          ``,
-          `| # | USD | Score | Skill pts | Matched | Title | URL |`,
-          `| - | --- | ----- | --------- | ------- | ----- | --- |`,
-          ...ranked.map(
-            (r, i) =>
-              `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.breakdown.skills} | ${r.breakdown.matchedSkills.join(", ") || "—"} | ${r.task.title.replace(/\|/g, "/")} | ${taskUrl(r.task.id)} |`,
-          ),
-          ``,
-        ];
         await mkdir(".cache", { recursive: true });
         await writeFile(
           ".cache/overnight-report.md",
-          lines.join("\n") + "\n",
+          report.markdown,
           "utf8",
         );
       }
       return {
-        content: [{ type: "text", text: JSON.stringify(slim, null, 2) }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                generatedAt: report.generatedAt,
+                skipCounts: report.skipCounts,
+                delta: report.delta,
+                ranked: slim,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
       };
     }
 

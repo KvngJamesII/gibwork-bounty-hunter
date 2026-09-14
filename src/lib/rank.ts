@@ -215,3 +215,61 @@ function skillTokenMatch(hay: string, skill: string): boolean {
 function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
+
+
+/** Why a task was dropped by coding+minUsd filters, or null if it would rank. */
+export function codingFilterSkipReason(
+  task: PublicTaskSummary,
+  opts: { minUsd?: number; codingOnly?: boolean } = {},
+): string | null {
+  const minUsd = opts.minUsd ?? 20;
+  const codingOnly = opts.codingOnly ?? true;
+  if (task.isOpen === false) return "closed";
+  const usd = parseUsd(task);
+  if (usd < minUsd) return `below_min_usd (<$${minUsd})`;
+  const days = daysUntil(task.deadline);
+  if (days != null && days < 0) return "expired";
+  const hay = [
+    task.title ?? "",
+    task.primarySkill?.label ?? "",
+    task.primarySkill?.slug ?? "",
+    ...(task.tags ?? []),
+    stripHtml(task.content ?? "").slice(0, 500),
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (codingOnly && !looksLikeCoding(hay)) return "not_coding";
+  if (codingOnly && isSocialOrOutreachSpam(task, hay)) return "social_outreach";
+  return null;
+}
+
+export type SubmitPathTag = "AGENT_OR_EMAIL_SUBMIT" | "HUMAN_BLOCKER";
+
+export interface SubmitPathInfo {
+  tag: SubmitPathTag;
+  blockers: string[];
+}
+
+/** Tag whether API fields imply a human gate (Discord/Twitter/capital/signature). */
+export function classifySubmitPath(task: PublicTaskSummary): SubmitPathInfo {
+  const blockers: string[] = [];
+  if (task.isTwitterTask) blockers.push("twitter_gate");
+  if (task.allowOnlyDiscordGuildSubmissions) {
+    const guild = task.requiredDiscordGuildName
+      ? `discord_guild(${task.requiredDiscordGuildName})`
+      : "discord_guild";
+    blockers.push(guild);
+  }
+  const minSub = Number(task.minSubmissionAmount ?? 0);
+  if (Number.isFinite(minSub) && minSub > 0) {
+    blockers.push(`min_submission_amount(${minSub})`);
+  }
+  const tags = (task.tags ?? []).join(" ");
+  if (/social|twitter|content|marketing|outreach/i.test(tags)) {
+    blockers.push("social_tags");
+  }
+  if (blockers.length) {
+    return { tag: "HUMAN_BLOCKER", blockers };
+  }
+  return { tag: "AGENT_OR_EMAIL_SUBMIT", blockers: [] };
+}

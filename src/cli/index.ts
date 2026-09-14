@@ -7,6 +7,7 @@ import { draftSubmission } from "../lib/draft.js";
 import { buildApplyPackForId } from "../lib/applyPack.js";
 import { formatDoctorReport, runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties, sleep } from "../lib/watch.js";
+import { buildOvernightReport } from "../lib/overnightReport.js";
 
 const program = new Command();
 program
@@ -14,7 +15,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.2");
+  .version("0.2.4");
 
 program
   .command("explore")
@@ -324,7 +325,7 @@ program
 program
   .command("overnight-report")
   .description(
-    "Write a markdown snapshot of top coding bounties ≥ min USD (docs + .cache) with skill-match scores",
+    "Write coding bounty overnight report (≥ min USD) with skip reasons, submit tags, and cache delta",
   )
   .option("--min-usd <n>", "minimum USD", process.env.GIB_HUNT_MIN_USD ?? "20")
   .option("--pages <n>", "explore pages to scan", "3")
@@ -350,88 +351,60 @@ program
       .map((s: string) => s.trim())
       .filter(Boolean);
     const all: Awaited<ReturnType<typeof exploreTasks>>["results"] = [];
+    let pagesScanned = 0;
     for (let page = 1; page <= pages; page++) {
       try {
         const { results } = await exploreTasks({ page, limit });
         all.push(...results);
+        pagesScanned = page;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`explore page ${page} skipped: ${msg}`);
         break;
       }
     }
-    const ranked = rankBounties(all, {
+    const report = await buildOvernightReport(all, {
       minUsd: Number(opts.minUsd),
-      codingOnly: true,
+      top: Number(opts.top),
       skills,
-    }).slice(0, Number(opts.top));
-    const now = new Date().toISOString();
-    const lines = [
-      `# Gibwork overnight coding bounty report`,
-      ``,
-      `Generated: ${now}`,
-      `Scanned pages: ${pages} × ${limit} (deduped by rank input)`,
-      `Filter: codingOnly + anti-social/outreach, minUsd≥${opts.minUsd}, top ${opts.top}`,
-      `Skill list: ${skills.join(", ")}`,
-      ``,
-    ];
-    if (!ranked.length) {
-      lines.push(`_No matching coding bounties._`);
-    } else {
-      lines.push(`| # | USD | Score | Skill pts | Matched | Title | URL |`);
-      lines.push(`| - | --- | ----- | --------- | ------- | ----- | --- |`);
-      ranked.forEach((r, i) => {
-        const matched = r.breakdown.matchedSkills.join(", ") || "—";
-        lines.push(
-          `| ${i + 1} | $${r.usdEstimate.toFixed(0)} | ${r.score.toFixed(1)} | ${r.breakdown.skills} | ${matched} | ${r.task.title.replace(/\|/g, "/")} | ${taskUrl(r.task.id)} |`,
-        );
-      });
-      lines.push("");
-      lines.push("## Top by reward (skill match)");
-      const byReward = [...ranked].sort((a, b) => b.usdEstimate - a.usdEstimate);
-      byReward.forEach((r, i) => {
-        lines.push(
-          `${i + 1}. $${r.usdEstimate.toFixed(0)} · skill=${r.breakdown.skills} [${r.breakdown.matchedSkills.join(", ") || "none"}] · ${r.task.title}`,
-        );
-        lines.push(`   ${taskUrl(r.task.id)}`);
-      });
-      lines.push("");
-      lines.push("## Breakdown");
-      for (const [i, r] of ranked.entries()) {
-        lines.push(`### ${i + 1}. ${r.task.title}`);
-        lines.push(
-          `- score ${r.score.toFixed(1)} · $${r.usdEstimate.toFixed(0)} · skillMatch=${r.breakdown.skills} [${r.breakdown.matchedSkills.join(", ") || "none"}] · daysLeft=${r.daysLeft?.toFixed?.(1) ?? r.daysLeft}`,
-        );
-        lines.push(`- ${r.reasons.join(" | ")}`);
-        lines.push(`- ${taskUrl(r.task.id)}`);
-        lines.push("");
-      }
-    }
-    const body = lines.join("\n") + "\n";
+      pagesScanned,
+      pageSize: limit,
+      priorCachePath: String(opts.cacheOut),
+    });
     await mkdir("docs", { recursive: true });
-    await writeFile(opts.out, body, "utf8");
+    await writeFile(opts.out, report.markdown, "utf8");
     const cachePath = String(opts.cacheOut);
     await mkdir(".cache", { recursive: true });
-    await writeFile(cachePath, body, "utf8");
-    console.log(`Wrote ${opts.out} and ${cachePath} (${ranked.length} bounties)`);
+    await writeFile(cachePath, report.markdown, "utf8");
+    console.log(
+      `Wrote ${opts.out} and ${cachePath} (${report.ranked.length} bounties, ${report.skipped.length} skipped)`,
+    );
     if (opts.json) {
       console.log(
         JSON.stringify(
-          ranked.map((r) => ({
-            score: r.score,
-            usd: r.usdEstimate,
-            skillMatch: r.breakdown.skills,
-            matchedSkills: r.breakdown.matchedSkills,
-            id: r.task.id,
-            title: r.task.title,
-            url: taskUrl(r.task.id),
-          })),
+          {
+            generatedAt: report.generatedAt,
+            skipCounts: report.skipCounts,
+            delta: report.delta,
+            ranked: report.tagged.map(({ ranked: r, submit }) => ({
+              score: r.score,
+              usd: r.usdEstimate,
+              tag: submit.tag,
+              blockers: submit.blockers,
+              skillMatch: r.breakdown.skills,
+              matchedSkills: r.breakdown.matchedSkills,
+              id: r.task.id,
+              title: r.task.title,
+              url: taskUrl(r.task.id),
+            })),
+          },
           null,
           2,
         ),
       );
     }
   });
+
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);

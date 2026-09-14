@@ -49,3 +49,13 @@ Shipped without Phantom / Discord / approvals:
 
 **Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
 
+
+## Overnight deepen (v0.2.4)
+
+Shipped without Phantom / Discord / approvals:
+
+1. **`overnightReport` module** — skip reasons (`closed` / `below_min_usd` / `not_coding` / `social_outreach` / `expired`), **AGENT_OR_EMAIL_SUBMIT** vs **HUMAN_BLOCKER** tags, prior-cache freshness + id delta.
+2. **CLI + MCP** `overnight-report` / `gib_overnight_report` use the shared builder.
+3. Version bump **0.2.4**.
+
+**Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
