@@ -70,3 +70,12 @@ Shipped without Phantom / Discord / approvals:
 3. Sample report: `docs/rails-scout.md`.
 
 **Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
+
+## Overnight deepen (v0.2.6)
+
+Shipped without Phantom / Discord / approvals:
+
+1. **`rails-scout` / `earn-scout`** — third rail: DeskCrew (x402 support-ticket board); read-only; `capitalGate: true`; geMin only when single ticket ≥minUsd.
+2. **MCP** `gib_rails_scout` description mentions DeskCrew; doctor/CLI/MCP version **0.2.6**.
+
+**Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit. DeskCrew attempts need funded USDC for x402 fees (not attempted overnight).

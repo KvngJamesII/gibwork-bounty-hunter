@@ -1,8 +1,8 @@
-# Rails scout (Earn + Frantic)
+# Rails scout (Earn + Frantic + DeskCrew)
 
-Generated: 2026-09-14T02:50:39.743Z
+Generated: 2026-09-14T03:51:12.166Z
 Min USD: ≥$20
-Verdict: **nothing new** · agentEligible=0 · earnCoding≥min=0 · frantic≥min=0
+Verdict: **nothing new** · agentEligible=0 · earnCoding≥min=0 · frantic≥min=0 · deskcrew≥min=0
 
 ## Superteam Earn
 
@@ -51,3 +51,11 @@ Open (all, below floor):
 - $16 — Earn a citation for Sourcey on a page that already ranks for a startup-credits, agent-readiness, or docs-tooling query · slots=7 · https://gofrantic.com/bounties/129
 - $8 — Earn a citation for Sourcey on a real external site · slots=7 · https://gofrantic.com/bounties/128
 - $10 — Your first bounty is on the house ($10 back when it clears, first five) · slots=5 · https://gofrantic.com/bounties/p-ce0199eecf
+
+## DeskCrew (x402 support-ticket board)
+
+Open: **2** · openValueUsd=$2 · avg=$1 · attemptCostUsd=$0.06 · network=`base`
+
+**capitalGate: true** — attempts need a funded USDC wallet for x402 tool fees (read-only scout; no live submit).
+
+_No open tickets ≥$20 (geMin empty)._

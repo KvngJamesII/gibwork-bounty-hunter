@@ -17,7 +17,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.5");
+  .version("0.2.6");
 
 program
   .command("explore")
@@ -413,7 +413,7 @@ program
   .command("rails-scout")
   .alias("earn-scout")
   .description(
-    "Scout Superteam Earn + Frantic for ≥minUsd agent/coding paths (standing skips applied)",
+    "Scout Superteam Earn + Frantic + DeskCrew for ≥minUsd agent/coding paths (standing skips applied)",
   )
   .option("--min-usd <n>", "minimum USD", process.env.GIB_HUNT_MIN_USD ?? "20")
   .option("--include-skipped", "do not apply IdleDev standing skip hints")

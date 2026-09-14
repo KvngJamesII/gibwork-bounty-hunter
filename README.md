@@ -57,7 +57,7 @@ gib-hunt submission-pack 1052f22d-3f87-4b1d-b0d7-71a60679e7fa   # alias → stdo
 # Overnight coding snapshot (+ .cache/overnight-report.md)
 gib-hunt overnight-report --min-usd 20 --top 10
 
-# Adjacent rails: Superteam Earn + Frantic (≥$20, standing skips)
+# Adjacent rails: Superteam Earn + Frantic + DeskCrew (≥$20, standing skips)
 gib-hunt rails-scout --min-usd 20
 gib-hunt earn-scout --json   # alias
 
@@ -134,7 +134,7 @@ Or after `npm link`:
 | `gib_draft_submission` | Markdown submission draft (no payment) |
 | `gib_apply_pack` | Apply/submission pack (outline + checklist; UUID or slug) |
 | `gib_overnight_report` | Overnight coding bounty snapshot + skill-match scores |
-| `gib_rails_scout` | Superteam Earn + Frantic ≥minUsd agent/coding scout |
+| `gib_rails_scout` | Superteam Earn + Frantic + DeskCrew ≥minUsd agent/coding scout |
 | `gib_watch_new_bounties` | One-shot poll for newly appearing ≥minUsd bounties |
 | `gib_doctor` | Node / SDK / public API health checks |
 

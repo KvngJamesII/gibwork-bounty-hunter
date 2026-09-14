@@ -20,7 +20,7 @@ import { runRailsScout } from "../lib/railsScout.js";
 import { writeFile, mkdir } from "node:fs/promises";
 
 const server = new Server(
-  { name: "gibwork-bounty-hunter", version: "0.2.5" },
+  { name: "gibwork-bounty-hunter", version: "0.2.6" },
   { capabilities: { tools: {} } },
 );
 
@@ -119,7 +119,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "gib_rails_scout",
       description:
-        "Scout Superteam Earn public open listings + Frantic board for ≥minUsd AGENT_ALLOWED/coding paths. Applies IdleDev standing skips unless includeSkipped.",
+        "Scout Superteam Earn + Frantic + DeskCrew (x402 support tickets) for ≥minUsd AGENT_ALLOWED/coding paths. Applies IdleDev standing skips unless includeSkipped. DeskCrew is capital-gated (USDC x402 fees).",
       inputSchema: {
         type: "object",
         properties: {

@@ -1,5 +1,5 @@
 /**
- * Multi-rail bounty scout: Superteam Earn (public) + Frantic board.
+ * Multi-rail bounty scout: Superteam Earn (public) + Frantic board + DeskCrew.
  * Complements Gibwork explore so overnight agents can see adjacent ≥$20 paths
  * without Phantom / Discord / X posting.
  */
@@ -29,6 +29,13 @@ export interface FranticBountySlim {
   url: string;
 }
 
+export interface DeskCrewBountySlim {
+  id: string;
+  title: string;
+  priceUsd: number;
+  url: string;
+}
+
 export interface RailsScoutResult {
   generatedAt: string;
   minUsd: number;
@@ -47,10 +54,22 @@ export interface RailsScoutResult {
     geMin: FranticBountySlim[];
     open: FranticBountySlim[];
   };
+  deskcrew: {
+    ok: boolean;
+    error?: string;
+    openCount: number;
+    openValueUsd: number;
+    avgValueUsd: number;
+    attemptCostUsd: number;
+    geMin: DeskCrewBountySlim[];
+    capitalGate: true;
+    network?: string;
+  };
   summary: {
     agentEligibleCount: number;
     earnCodingGeMinCount: number;
     franticGeMinCount: number;
+    deskcrewGeMinCount: number;
     actionableCount: number;
     nothingNew: boolean;
   };
@@ -61,6 +80,9 @@ const EARN_OPEN_URL = "https://earn.superteam.fun/api/listings?status=open";
 const FRANTIC_BOARD_URL = "https://gofrantic.com/v1/board";
 const EARN_LISTING_BASE = "https://earn.superteam.fun/listing";
 const FRANTIC_BASE = "https://gofrantic.com";
+const DESKCREW_X402_URL = "https://deskcrew.io/.well-known/x402";
+const DESKCREW_BOUNTIES_URL = "https://deskcrew.io/api/bounties";
+const DESKCREW_ARENA = "https://deskcrew.io/arena";
 
 /** IdleDev / Crypto Guru standing skips (slug substrings or title keywords). */
 export const DEFAULT_SKIP_HINTS: Array<{ match: RegExp; hint: string }> = [
@@ -161,6 +183,86 @@ function normalizeFrantic(raw: unknown): FranticBountySlim[] {
   });
 }
 
+function readEarnInfo(x402: unknown): {
+  openCount: number;
+  openValueUsd: number;
+  avgValueUsd: number;
+  attemptCostUsd: number;
+  network?: string;
+} | null {
+  if (!x402 || typeof x402 !== "object") return null;
+  const ext = (x402 as { extensions?: { earn?: { info?: Record<string, unknown> } } })
+    .extensions;
+  const info = ext?.earn?.info;
+  if (!info || typeof info !== "object") return null;
+  const openCount = Number(info.open ?? 0);
+  const openValueUsd = Number(info.openValueUsd ?? 0);
+  const avgValueUsd = Number(info.avgValueUsd ?? 0);
+  const attemptCostUsd = Number(info.attemptCostUsd ?? 0);
+  const network =
+    info.network != null && String(info.network).length
+      ? String(info.network)
+      : undefined;
+  return {
+    openCount: Number.isFinite(openCount) ? openCount : 0,
+    openValueUsd: Number.isFinite(openValueUsd) ? openValueUsd : 0,
+    avgValueUsd: Number.isFinite(avgValueUsd) ? avgValueUsd : 0,
+    attemptCostUsd: Number.isFinite(attemptCostUsd) ? attemptCostUsd : 0,
+    network,
+  };
+}
+
+function normalizeDeskCrewBounties(
+  raw: unknown,
+  minUsd: number,
+): {
+  openCount: number;
+  openValueUsd: number;
+  avgValueUsd: number;
+  geMin: DeskCrewBountySlim[];
+  humanPage: string;
+} {
+  const body = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const list = Array.isArray(body.bounties) ? body.bounties : [];
+  const humanPage =
+    body.humanPage != null && String(body.humanPage).length
+      ? String(body.humanPage)
+      : DESKCREW_ARENA;
+  const economics =
+    body.economics && typeof body.economics === "object"
+      ? (body.economics as Record<string, unknown>)
+      : {};
+  const openCount =
+    Number.isFinite(Number(economics.openBounties ?? body.count ?? list.length))
+      ? Number(economics.openBounties ?? body.count ?? list.length)
+      : list.length;
+  const openValueUsd = Number.isFinite(Number(economics.openBountyUsd ?? 0))
+    ? Number(economics.openBountyUsd ?? 0)
+    : 0;
+  const avgValueUsd = Number.isFinite(Number(economics.avgBountyUsd ?? 0))
+    ? Number(economics.avgBountyUsd ?? 0)
+    : 0;
+
+  const geMin: DeskCrewBountySlim[] = [];
+  for (const row of list) {
+    const b = row as Record<string, unknown>;
+    const price = Number(b.bountyUsd ?? b.netRewardUsd ?? 0);
+    if (!Number.isFinite(price) || price < minUsd) continue;
+    const id = String(b.ticketId ?? "");
+    geMin.push({
+      id,
+      title: String(b.subject ?? "(untitled)"),
+      priceUsd: price,
+      url: `${humanPage}${humanPage.includes("?") ? "&" : "?"}ticket=${encodeURIComponent(id)}`,
+    });
+  }
+
+  return { openCount, openValueUsd, avgValueUsd, geMin, humanPage };
+}
+
 export interface RailsScoutOptions {
   minUsd?: number;
   /** Include listings that match DEFAULT_SKIP_HINTS in agentEligible / codingGeMin. Default false. */
@@ -186,6 +288,15 @@ export async function runRailsScout(
     openCount: 0,
     geMin: [],
     open: [],
+  };
+  const deskcrew: RailsScoutResult["deskcrew"] = {
+    ok: false,
+    openCount: 0,
+    openValueUsd: 0,
+    avgValueUsd: 0,
+    attemptCostUsd: 0,
+    geMin: [],
+    capitalGate: true,
   };
 
   try {
@@ -223,6 +334,45 @@ export async function runRailsScout(
     frantic.error = err instanceof Error ? err.message : String(err);
   }
 
+  {
+    const errors: string[] = [];
+    let x402Info: ReturnType<typeof readEarnInfo> = null;
+    let bountyNorm: ReturnType<typeof normalizeDeskCrewBounties> | null = null;
+
+    try {
+      const x402 = await fetchJson(DESKCREW_X402_URL);
+      x402Info = readEarnInfo(x402);
+      if (!x402Info) errors.push("x402 missing extensions.earn.info");
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+
+    try {
+      const raw = await fetchJson(DESKCREW_BOUNTIES_URL);
+      bountyNorm = normalizeDeskCrewBounties(raw, minUsd);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+
+    if (x402Info || bountyNorm) {
+      deskcrew.ok = true;
+      deskcrew.openCount = x402Info?.openCount ?? bountyNorm?.openCount ?? 0;
+      deskcrew.openValueUsd =
+        x402Info?.openValueUsd ?? bountyNorm?.openValueUsd ?? 0;
+      deskcrew.avgValueUsd =
+        x402Info?.avgValueUsd ?? bountyNorm?.avgValueUsd ?? 0;
+      deskcrew.attemptCostUsd = x402Info?.attemptCostUsd ?? 0;
+      deskcrew.network = x402Info?.network;
+      deskcrew.geMin = bountyNorm?.geMin ?? [];
+      deskcrew.capitalGate = true;
+      if (errors.length && (!x402Info || !bountyNorm)) {
+        deskcrew.error = errors.join("; ");
+      }
+    } else {
+      deskcrew.error = errors.join("; ") || "DeskCrew fetch failed";
+    }
+  }
+
   const actionableCount =
     earn.agentEligible.length +
     earn.codingGeMin.filter(
@@ -230,16 +380,21 @@ export async function runRailsScout(
         !earn.agentEligible.some((a) => a.id === e.id) &&
         e.agentAccess !== "HUMAN_ONLY",
     ).length +
-    frantic.geMin.length;
+    frantic.geMin.length +
+    deskcrew.geMin.length;
 
-  // "nothing new" for IdleDev overnight: no AGENT_ALLOWED left after skips, no Frantic ≥min
+  // "nothing new" for IdleDev overnight: no AGENT_ALLOWED left after skips,
+  // no Frantic ≥min, no DeskCrew ≥min
   const nothingNew =
-    earn.agentEligible.length === 0 && frantic.geMin.length === 0;
+    earn.agentEligible.length === 0 &&
+    frantic.geMin.length === 0 &&
+    deskcrew.geMin.length === 0;
 
   const summary = {
     agentEligibleCount: earn.agentEligible.length,
     earnCodingGeMinCount: earn.codingGeMin.length,
     franticGeMinCount: frantic.geMin.length,
+    deskcrewGeMinCount: deskcrew.geMin.length,
     actionableCount,
     nothingNew,
   };
@@ -249,10 +404,19 @@ export async function runRailsScout(
     minUsd,
     earn,
     frantic,
+    deskcrew,
     summary,
   });
 
-  return { generatedAt, minUsd, earn, frantic, summary, markdown };
+  return {
+    generatedAt,
+    minUsd,
+    earn,
+    frantic,
+    deskcrew,
+    summary,
+    markdown,
+  };
 }
 
 function formatRailsScoutMarkdown(r: {
@@ -260,14 +424,15 @@ function formatRailsScoutMarkdown(r: {
   minUsd: number;
   earn: RailsScoutResult["earn"];
   frantic: RailsScoutResult["frantic"];
+  deskcrew: RailsScoutResult["deskcrew"];
   summary: RailsScoutResult["summary"];
 }): string {
   const lines: string[] = [
-    `# Rails scout (Earn + Frantic)`,
+    `# Rails scout (Earn + Frantic + DeskCrew)`,
     ``,
     `Generated: ${r.generatedAt}`,
     `Min USD: ≥$${r.minUsd}`,
-    `Verdict: **${r.summary.nothingNew ? "nothing new" : "paths found"}** · agentEligible=${r.summary.agentEligibleCount} · earnCoding≥min=${r.summary.earnCodingGeMinCount} · frantic≥min=${r.summary.franticGeMinCount}`,
+    `Verdict: **${r.summary.nothingNew ? "nothing new" : "paths found"}** · agentEligible=${r.summary.agentEligibleCount} · earnCoding≥min=${r.summary.earnCodingGeMinCount} · frantic≥min=${r.summary.franticGeMinCount} · deskcrew≥min=${r.summary.deskcrewGeMinCount}`,
     ``,
     `## Superteam Earn`,
     ``,
@@ -340,6 +505,36 @@ function formatRailsScoutMarkdown(r: {
           `- **$${b.priceUsd}** — ${b.title} · slots=${b.slotsAvailable ?? "?"} · ${b.url}`,
         );
       }
+    }
+  }
+  lines.push(``);
+
+  lines.push(`## DeskCrew (x402 support-ticket board)`);
+  lines.push(``);
+  if (!r.deskcrew.ok) {
+    lines.push(`_Fetch failed:_ ${r.deskcrew.error ?? "unknown"}`);
+  } else {
+    const net = r.deskcrew.network ? ` · network=\`${r.deskcrew.network}\`` : "";
+    lines.push(
+      `Open: **${r.deskcrew.openCount}** · openValueUsd=$${r.deskcrew.openValueUsd} · avg=$${r.deskcrew.avgValueUsd} · attemptCostUsd=$${r.deskcrew.attemptCostUsd}${net}`,
+    );
+    lines.push(``);
+    lines.push(
+      `**capitalGate: true** — attempts need a funded USDC wallet for x402 tool fees (read-only scout; no live submit).`,
+    );
+    lines.push(``);
+    if (!r.deskcrew.geMin.length) {
+      lines.push(`_No open tickets ≥$${r.minUsd} (geMin empty)._`);
+    } else {
+      for (const b of r.deskcrew.geMin) {
+        lines.push(
+          `- **$${b.priceUsd}** — ${b.title} · \`${b.id}\` · ${b.url}`,
+        );
+      }
+    }
+    if (r.deskcrew.error) {
+      lines.push(``);
+      lines.push(`_Partial:_ ${r.deskcrew.error}`);
     }
   }
   lines.push(``);
