@@ -10,6 +10,7 @@ import { formatDoctorReport, runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties, sleep } from "../lib/watch.js";
 import { buildOvernightReport } from "../lib/overnightReport.js";
 import { runRailsScout } from "../lib/railsScout.js";
+import { buildGrindReport } from "../lib/grindReport.js";
 
 const program = new Command();
 program
@@ -17,7 +18,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.7");
+  .version("0.2.8");
 
 program
   .command("explore")
@@ -437,6 +438,70 @@ program
     }
     if (report.summary.nothingNew) process.exitCode = 2;
   });
+
+
+program
+  .command("grind-report")
+  .alias("overnight-grind")
+  .description(
+    "One-shot overnight grind: wallet check + Earn/Frantic/DeskCrew + Collaborators (read-only; no Phantom)",
+  )
+  .option("--min-usd <n>", "minimum USD", process.env.GIB_HUNT_MIN_USD ?? "20")
+  .option(
+    "--wallet <addr>",
+    "Solana address for public balance check",
+    process.env.GIB_HUNT_WALLET ?? process.env.SOLANA_WALLET,
+  )
+  .option("--include-skipped", "do not apply IdleDev standing skip hints on Earn")
+  .option("--no-rails-cache", "do not write rails-scout Earn slug cache")
+  .option(
+    "-o, --out <path>",
+    "write markdown report",
+    ".cache/grind-report.md",
+  )
+  .option("--json", "print JSON to stdout (default: markdown)")
+  .action(async (opts) => {
+    const report = await buildGrindReport({
+      minUsd: Number(opts.minUsd),
+      wallet: opts.wallet ? String(opts.wallet) : undefined,
+      includeSkipped: Boolean(opts.includeSkipped),
+      writeRailsCache: opts.railsCache !== false,
+      outPath: opts.out ? String(opts.out) : undefined,
+    });
+    if (opts.out) {
+      console.error(`Wrote ${opts.out}`);
+    }
+    if (opts.json) {
+      const { markdown: _md, rails, ...rest } = report;
+      const slimRails = {
+        generatedAt: rails.generatedAt,
+        summary: rails.summary,
+        earnDelta: rails.earnDelta,
+        earn: {
+          ok: rails.earn.ok,
+          error: rails.earn.error,
+          totalOpen: rails.earn.totalOpen,
+          agentEligible: rails.earn.agentEligible,
+          codingGeMin: rails.earn.codingGeMin,
+        },
+        frantic: {
+          ok: rails.frantic.ok,
+          error: rails.frantic.error,
+          openCount: rails.frantic.openCount,
+          geMin: rails.frantic.geMin,
+          open: rails.frantic.open,
+        },
+        deskcrew: rails.deskcrew,
+      };
+      console.log(
+        JSON.stringify({ ...rest, rails: slimRails }, null, 2),
+      );
+    } else {
+      process.stdout.write(report.markdown);
+    }
+    if (report.summary.nothingNew) process.exitCode = 2;
+  });
+
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);

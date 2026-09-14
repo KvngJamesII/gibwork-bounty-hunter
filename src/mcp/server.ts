@@ -17,10 +17,11 @@ import { buildApplyPackForId } from "../lib/applyPack.js";
 import { runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties } from "../lib/watch.js";
 import { runRailsScout } from "../lib/railsScout.js";
+import { buildGrindReport } from "../lib/grindReport.js";
 import { writeFile, mkdir } from "node:fs/promises";
 
 const server = new Server(
-  { name: "gibwork-bounty-hunter", version: "0.2.7" },
+  { name: "gibwork-bounty-hunter", version: "0.2.8" },
   { capabilities: { tools: {} } },
 );
 
@@ -125,6 +126,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           minUsd: { type: "number" },
           includeSkipped: { type: "boolean" },
+        },
+      },
+    },
+    {
+      name: "gib_grind_report",
+      description:
+        "Overnight grind one-pager: read-only Solana wallet check + Earn/Frantic/DeskCrew rails-scout + Collaborators.build. No Phantom/signing.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          minUsd: { type: "number" },
+          wallet: { type: "string" },
+          includeSkipped: { type: "boolean" },
+          writeRailsCache: { type: "boolean" },
+          writeCache: { type: "boolean" },
         },
       },
     },
@@ -260,6 +276,45 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const { markdown: _md, ...rest } = report;
       return {
         content: [{ type: "text", text: JSON.stringify(rest, null, 2) }],
+      };
+    }
+
+
+    if (name === "gib_grind_report") {
+      const report = await buildGrindReport({
+        minUsd: args.minUsd != null ? Number(args.minUsd) : 20,
+        wallet: args.wallet ? String(args.wallet) : undefined,
+        includeSkipped: Boolean(args.includeSkipped),
+        writeRailsCache: args.writeRailsCache !== false,
+        outPath:
+          args.writeCache === false ? undefined : ".cache/grind-report.md",
+      });
+      const { markdown, rails, ...rest } = report;
+      const slim = {
+        ...rest,
+        markdown,
+        rails: {
+          generatedAt: rails.generatedAt,
+          summary: rails.summary,
+          earnDelta: rails.earnDelta,
+          earn: {
+            ok: rails.earn.ok,
+            error: rails.earn.error,
+            totalOpen: rails.earn.totalOpen,
+            agentEligible: rails.earn.agentEligible,
+            codingGeMin: rails.earn.codingGeMin,
+          },
+          frantic: {
+            ok: rails.frantic.ok,
+            error: rails.frantic.error,
+            openCount: rails.frantic.openCount,
+            geMin: rails.frantic.geMin,
+          },
+          deskcrew: rails.deskcrew,
+        },
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(slim, null, 2) }],
       };
     }
 

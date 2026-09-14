@@ -88,3 +88,12 @@ Shipped without Phantom / Discord / approvals:
 2. Version bump **0.2.7**.
 
 **Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
+
+## Overnight deepen (v0.2.8)
+
+Shipped without Phantom / Discord / approvals:
+
+1. **`grind-report` / `overnight-grind`** — one-shot overnight grind: public Solana wallet check (SOL+USDC) + Earn/Frantic/DeskCrew rails-scout + Collaborators.build summary; writes `.cache/grind-report.md`; exit 2 when nothing new.
+2. **MCP** `gib_grind_report`; doctor/CLI/MCP version **0.2.8**.
+
+**Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
