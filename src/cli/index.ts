@@ -17,7 +17,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.6");
+  .version("0.2.7");
 
 program
   .command("explore")

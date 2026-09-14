@@ -57,7 +57,7 @@ gib-hunt submission-pack 1052f22d-3f87-4b1d-b0d7-71a60679e7fa   # alias → stdo
 # Overnight coding snapshot (+ .cache/overnight-report.md)
 gib-hunt overnight-report --min-usd 20 --top 10
 
-# Adjacent rails: Superteam Earn + Frantic + DeskCrew (≥$20, standing skips)
+# Adjacent rails: Superteam Earn + Frantic + DeskCrew (≥$20, standing skips; Earn slug delta cache)
 gib-hunt rails-scout --min-usd 20
 gib-hunt earn-scout --json   # alias
 

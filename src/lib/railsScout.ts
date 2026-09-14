@@ -1,3 +1,6 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+
 /**
  * Multi-rail bounty scout: Superteam Earn (public) + Frantic board + DeskCrew.
  * Complements Gibwork explore so overnight agents can see adjacent ≥$20 paths
@@ -72,6 +75,15 @@ export interface RailsScoutResult {
     deskcrewGeMinCount: number;
     actionableCount: number;
     nothingNew: boolean;
+  };
+  /** Earn open-slug delta vs prior `.cache/rails-scout-last.json` (when writeCache). */
+  earnDelta: {
+    priorGeneratedAt: string | null;
+    priorAgeLabel: string | null;
+    added: string[];
+    removed: string[];
+    unchanged: number;
+    cachePath: string;
   };
   markdown: string;
 }
@@ -263,10 +275,56 @@ function normalizeDeskCrewBounties(
   return { openCount, openValueUsd, avgValueUsd, geMin, humanPage };
 }
 
+
+const DEFAULT_RAILS_CACHE = ".cache/rails-scout-last.json";
+
+export interface RailsScoutCacheFile {
+  generatedAt: string;
+  minUsd: number;
+  earnSlugs: string[];
+  earnTitles?: Record<string, string>;
+}
+
+function ageLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const mins = Math.round(ms / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+async function loadRailsCache(
+  cachePath: string,
+): Promise<RailsScoutCacheFile | null> {
+  try {
+    const raw = await readFile(cachePath, "utf8");
+    const parsed = JSON.parse(raw) as RailsScoutCacheFile;
+    if (!parsed || !Array.isArray(parsed.earnSlugs)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function saveRailsCache(
+  cachePath: string,
+  payload: RailsScoutCacheFile,
+): Promise<void> {
+  await mkdir(dirname(cachePath) || ".", { recursive: true });
+  await writeFile(cachePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+}
+
 export interface RailsScoutOptions {
   minUsd?: number;
   /** Include listings that match DEFAULT_SKIP_HINTS in agentEligible / codingGeMin. Default false. */
   includeSkipped?: boolean;
+  /** Persist / compare Earn slug set (default `.cache/rails-scout-last.json`). */
+  cachePath?: string;
+  /** Write cache after scout (default true). */
+  writeCache?: boolean;
 }
 
 export async function runRailsScout(
@@ -274,7 +332,10 @@ export async function runRailsScout(
 ): Promise<RailsScoutResult> {
   const minUsd = opts.minUsd ?? 20;
   const includeSkipped = opts.includeSkipped ?? false;
+  const cachePath = opts.cachePath ?? DEFAULT_RAILS_CACHE;
+  const writeCache = opts.writeCache ?? true;
   const generatedAt = new Date().toISOString();
+  const priorCache = await loadRailsCache(cachePath);
 
   const earn: RailsScoutResult["earn"] = {
     ok: false,
@@ -399,6 +460,32 @@ export async function runRailsScout(
     nothingNew,
   };
 
+  const currentSlugs = earn.all.map((e) => e.slug).filter(Boolean);
+  const priorSlugs = new Set(priorCache?.earnSlugs ?? []);
+  const currentSet = new Set(currentSlugs);
+  const added = currentSlugs.filter((s) => !priorSlugs.has(s));
+  const removed = [...priorSlugs].filter((s) => !currentSet.has(s));
+  const unchanged = currentSlugs.filter((s) => priorSlugs.has(s)).length;
+  const earnDelta = {
+    priorGeneratedAt: priorCache?.generatedAt ?? null,
+    priorAgeLabel: ageLabel(priorCache?.generatedAt ?? null),
+    added,
+    removed,
+    unchanged,
+    cachePath,
+  };
+
+  if (writeCache && earn.ok) {
+    const earnTitles: Record<string, string> = {};
+    for (const e of earn.all) earnTitles[e.slug] = e.title;
+    await saveRailsCache(cachePath, {
+      generatedAt,
+      minUsd,
+      earnSlugs: currentSlugs,
+      earnTitles,
+    });
+  }
+
   const markdown = formatRailsScoutMarkdown({
     generatedAt,
     minUsd,
@@ -406,6 +493,7 @@ export async function runRailsScout(
     frantic,
     deskcrew,
     summary,
+    earnDelta,
   });
 
   return {
@@ -415,6 +503,7 @@ export async function runRailsScout(
     frantic,
     deskcrew,
     summary,
+    earnDelta,
     markdown,
   };
 }
@@ -426,7 +515,13 @@ function formatRailsScoutMarkdown(r: {
   frantic: RailsScoutResult["frantic"];
   deskcrew: RailsScoutResult["deskcrew"];
   summary: RailsScoutResult["summary"];
+  earnDelta: RailsScoutResult["earnDelta"];
 }): string {
+  const d = r.earnDelta;
+  const deltaLine =
+    d.priorGeneratedAt == null
+      ? `_No prior cache_ (\`${d.cachePath}\`) — baseline written this run.`
+      : `Vs prior @ ${d.priorGeneratedAt} (${d.priorAgeLabel ?? "?"}): **+${d.added.length}** new · **−${d.removed.length}** gone · **${d.unchanged}** unchanged`;
   const lines: string[] = [
     `# Rails scout (Earn + Frantic + DeskCrew)`,
     ``,
@@ -434,9 +529,23 @@ function formatRailsScoutMarkdown(r: {
     `Min USD: ≥$${r.minUsd}`,
     `Verdict: **${r.summary.nothingNew ? "nothing new" : "paths found"}** · agentEligible=${r.summary.agentEligibleCount} · earnCoding≥min=${r.summary.earnCodingGeMinCount} · frantic≥min=${r.summary.franticGeMinCount} · deskcrew≥min=${r.summary.deskcrewGeMinCount}`,
     ``,
-    `## Superteam Earn`,
+    `## Earn listing delta`,
     ``,
+    deltaLine,
   ];
+  if (d.added.length) {
+    lines.push(``);
+    lines.push(`New slugs:`);
+    for (const s of d.added.slice(0, 30)) lines.push(`- \`${s}\``);
+  }
+  if (d.removed.length) {
+    lines.push(``);
+    lines.push(`Gone slugs:`);
+    for (const s of d.removed.slice(0, 30)) lines.push(`- \`${s}\``);
+  }
+  lines.push(``);
+  lines.push(`## Superteam Earn`);
+  lines.push(``);
 
   if (!r.earn.ok) {
     lines.push(`_Fetch failed:_ ${r.earn.error ?? "unknown"}`);

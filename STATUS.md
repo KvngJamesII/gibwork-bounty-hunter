@@ -79,3 +79,12 @@ Shipped without Phantom / Discord / approvals:
 2. **MCP** `gib_rails_scout` description mentions DeskCrew; doctor/CLI/MCP version **0.2.6**.
 
 **Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit. DeskCrew attempts need funded USDC for x402 fees (not attempted overnight).
+
+## Overnight deepen (v0.2.7)
+
+Shipped without Phantom / Discord / approvals:
+
+1. **`rails-scout` Earn listing delta** — compares open Earn slugs to `.cache/rails-scout-last.json`; markdown section + `earnDelta` in JSON/MCP; cache written by default (`writeCache`).
+2. Version bump **0.2.7**.
+
+**Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
