@@ -371,7 +371,7 @@ program
       ``,
       `Generated: ${now}`,
       `Scanned pages: ${pages} × ${limit} (deduped by rank input)`,
-      `Filter: codingOnly, minUsd≥${opts.minUsd}, top ${opts.top}`,
+      `Filter: codingOnly + anti-social/outreach, minUsd≥${opts.minUsd}, top ${opts.top}`,
       `Skill list: ${skills.join(", ")}`,
       ``,
     ];

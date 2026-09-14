@@ -37,3 +37,15 @@ Shipped without Phantom / Discord / approvals:
 4. Version bump **0.2.2**; README CLI/MCP tables updated.
 
 **Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
+
+## Overnight deepen (v0.2.3)
+
+Shipped without Phantom / Discord / approvals:
+
+1. **Rank anti-spam** — `codingOnly` now drops Social Media / Twitter / outreach / "share your" / deal-close spam that was polluting overnight reports.
+2. **Skill word-boundary match** — `rust` no longer matches inside `trust` (false skill pts).
+3. **Apply-pack blockers** — surfaces Twitter gate + Discord guild requirement from task API fields.
+4. Version bump **0.2.3**.
+
+**Still human-blocked:** Discord role + ≥2 sessions + demo video + final gib.work submit.
+

@@ -58,6 +58,7 @@ export function rankBounties(
       .toLowerCase();
 
     if (codingOnly && !looksLikeCoding(hay)) continue;
+    if (codingOnly && isSocialOrOutreachSpam(task, hay)) continue;
 
     const reasons: string[] = [];
     const breakdown: ScoreBreakdown = {
@@ -73,7 +74,7 @@ export function rankBounties(
     reasons.push(`reward~$${usd.toFixed(0)}(+${breakdown.reward.toFixed(1)})`);
 
     // Skill match
-    const matched = skills.filter((s) => hay.includes(s));
+    const matched = skills.filter((s) => skillTokenMatch(hay, s));
     breakdown.matchedSkills = matched;
     breakdown.skills = matched.length * 12;
     if (matched.length) {
@@ -167,9 +168,48 @@ export function defaultSkills(): string[] {
 }
 
 function looksLikeCoding(hay: string): boolean {
-  return /(develop|code|typescript|javascript|rust|python|sdk|cli|mcp|api|solana|github|repo|backend|agent|automat)/i.test(
+  return /\b(develop(?:ment|er)?|coding|typescript|javascript|rust|python|sdk|cli|mcp|api|solana|github|repo|backend|automat(?:e|ion)?)\b/i.test(
     hay,
   );
+}
+
+/** Social / sales / Discord-outreach spam that falsely matches coding filters. */
+export function isSocialOrOutreachSpam(
+  task: PublicTaskSummary,
+  hay?: string,
+): boolean {
+  const tags = (task.tags ?? []).map((t) => t.toLowerCase());
+  if (tags.some((t) => /social|twitter|content|marketing|outreach|influencer/.test(t))) {
+    return true;
+  }
+  const h =
+    hay ??
+    [
+      task.title ?? "",
+      task.primarySkill?.label ?? "",
+      ...(task.tags ?? []),
+      stripHtml(task.content ?? "").slice(0, 800),
+    ]
+      .join(" ")
+      .toLowerCase();
+  if (
+    /\b(share (?:your|how)|x post|tweet|follow us on x|discord (?:server|join)|close a deal|outreach agent|pick one theme|video reaction)\b/i.test(
+      h,
+    )
+  ) {
+    return true;
+  }
+  // Twitter-gated gib tasks
+  if (task.isTwitterTask) return true;
+  return false;
+}
+
+function skillTokenMatch(hay: string, skill: string): boolean {
+  const s = skill.trim().toLowerCase();
+  if (!s) return false;
+  // Word-boundary match so "rust" does not hit "trust" / "frustration".
+  const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(hay);
 }
 
 function stripHtml(html: string): string {

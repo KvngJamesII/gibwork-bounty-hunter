@@ -137,6 +137,16 @@ export function buildApplyPack(
       ? ranked.reasons.map((r) => `- ${r}`).join("\n")
       : "- (no rank context)",
     ``,
+    `## Agent blockers`,
+    ``,
+    task.isTwitterTask ? `- **Twitter-gated** — skip for autonomous overnight grind.` : `- Not Twitter-gated.`,
+    task.allowOnlyDiscordGuildSubmissions
+      ? `- **Discord guild required**${task.requiredDiscordGuildName ? ` (${task.requiredDiscordGuildName})` : ""} — human join/role.`
+      : `- No Discord guild gate on API fields.`,
+    /social|twitter|content|marketing|outreach/i.test(tags.join(" "))
+      ? `- **Social/outreach tags** — skip under standing order (no gib social spam).`
+      : null,
+    ``,
     `## Notes for agents`,
     ``,
     `- This pack is draft-only; it does not pay or submit.`,

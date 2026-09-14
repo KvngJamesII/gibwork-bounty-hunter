@@ -28,6 +28,9 @@ export interface PublicTaskSummary {
   slug?: string;
   content?: string;
   status?: string;
+  isTwitterTask?: boolean;
+  allowOnlyDiscordGuildSubmissions?: boolean;
+  requiredDiscordGuildName?: string | null;
 }
 
 export async function exploreTasks(opts: {
