@@ -6,7 +6,7 @@ A terminal **CLI + MCP server** that helps developers and AI agents **discover, 
 
 | Piece | Role |
 | --- | --- |
-| `gib-hunt` CLI | explore / rank / show / draft / apply-pack / overnight-report / watch / alert / doctor |
+| `gib-hunt` CLI | explore / rank / show / draft / apply-pack / overnight-report / rails-scout / watch / alert / doctor |
 | MCP server | tools for Cursor / Claude / other agents |
 | `@gibwork/sdk` | wallet-authenticated discovery & submissions when a local keypair is configured |
 
@@ -56,6 +56,10 @@ gib-hunt submission-pack 1052f22d-3f87-4b1d-b0d7-71a60679e7fa   # alias → stdo
 
 # Overnight coding snapshot (+ .cache/overnight-report.md)
 gib-hunt overnight-report --min-usd 20 --top 10
+
+# Adjacent rails: Superteam Earn + Frantic (≥$20, standing skips)
+gib-hunt rails-scout --min-usd 20
+gib-hunt earn-scout --json   # alias
 
 # New bounty alerts (seen IDs under .cache/gib-hunt-seen.json)
 gib-hunt watch --seed                  # seed cache without alerts
@@ -130,6 +134,7 @@ Or after `npm link`:
 | `gib_draft_submission` | Markdown submission draft (no payment) |
 | `gib_apply_pack` | Apply/submission pack (outline + checklist; UUID or slug) |
 | `gib_overnight_report` | Overnight coding bounty snapshot + skill-match scores |
+| `gib_rails_scout` | Superteam Earn + Frantic ≥minUsd agent/coding scout |
 | `gib_watch_new_bounties` | One-shot poll for newly appearing ≥minUsd bounties |
 | `gib_doctor` | Node / SDK / public API health checks |
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { writeFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import { exploreTasks, getTask, taskUrl } from "../lib/publicApi.js";
 import { formatRankTable, rankBounties, AGENT_DEFAULT_SKILLS } from "../lib/rank.js";
 import { draftSubmission } from "../lib/draft.js";
@@ -8,6 +9,7 @@ import { buildApplyPackForId } from "../lib/applyPack.js";
 import { formatDoctorReport, runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties, sleep } from "../lib/watch.js";
 import { buildOvernightReport } from "../lib/overnightReport.js";
+import { runRailsScout } from "../lib/railsScout.js";
 
 const program = new Command();
 program
@@ -15,7 +17,7 @@ program
   .description(
     "Gibwork bounty hunter — discover & rank coding bounties from the terminal (SDK/CLI/MCP hackathon use case)",
   )
-  .version("0.2.4");
+  .version("0.2.5");
 
 program
   .command("explore")
@@ -405,6 +407,36 @@ program
     }
   });
 
+
+
+program
+  .command("rails-scout")
+  .alias("earn-scout")
+  .description(
+    "Scout Superteam Earn + Frantic for ≥minUsd agent/coding paths (standing skips applied)",
+  )
+  .option("--min-usd <n>", "minimum USD", process.env.GIB_HUNT_MIN_USD ?? "20")
+  .option("--include-skipped", "do not apply IdleDev standing skip hints")
+  .option("-o, --out <path>", "write markdown report")
+  .option("--json", "print JSON to stdout (default: markdown)")
+  .action(async (opts) => {
+    const report = await runRailsScout({
+      minUsd: Number(opts.minUsd),
+      includeSkipped: Boolean(opts.includeSkipped),
+    });
+    if (opts.out) {
+      await mkdir(dirname(opts.out) || ".", { recursive: true });
+      await writeFile(opts.out, report.markdown, "utf8");
+      console.error(`Wrote ${opts.out}`);
+    }
+    if (opts.json) {
+      const { markdown: _md, ...rest } = report;
+      console.log(JSON.stringify(rest, null, 2));
+    } else {
+      process.stdout.write(report.markdown);
+    }
+    if (report.summary.nothingNew) process.exitCode = 2;
+  });
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);

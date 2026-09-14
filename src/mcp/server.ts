@@ -16,10 +16,11 @@ import { draftSubmission } from "../lib/draft.js";
 import { buildApplyPackForId } from "../lib/applyPack.js";
 import { runDoctorChecks } from "../lib/doctor.js";
 import { pollNewBounties } from "../lib/watch.js";
+import { runRailsScout } from "../lib/railsScout.js";
 import { writeFile, mkdir } from "node:fs/promises";
 
 const server = new Server(
-  { name: "gibwork-bounty-hunter", version: "0.2.2" },
+  { name: "gibwork-bounty-hunter", version: "0.2.5" },
   { capabilities: { tools: {} } },
 );
 
@@ -113,6 +114,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           skills: { type: "array", items: { type: "string" } },
         },
         required: ["taskIdOrSlug"],
+      },
+    },
+    {
+      name: "gib_rails_scout",
+      description:
+        "Scout Superteam Earn public open listings + Frantic board for ≥minUsd AGENT_ALLOWED/coding paths. Applies IdleDev standing skips unless includeSkipped.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          minUsd: { type: "number" },
+          includeSkipped: { type: "boolean" },
+        },
       },
     },
     {
@@ -236,6 +249,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         skills,
       });
       return { content: [{ type: "text", text: markdown }] };
+    }
+
+
+    if (name === "gib_rails_scout") {
+      const report = await runRailsScout({
+        minUsd: args.minUsd != null ? Number(args.minUsd) : 20,
+        includeSkipped: Boolean(args.includeSkipped),
+      });
+      const { markdown: _md, ...rest } = report;
+      return {
+        content: [{ type: "text", text: JSON.stringify(rest, null, 2) }],
+      };
     }
 
     if (name === "gib_overnight_report") {
